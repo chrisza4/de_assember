@@ -9,6 +9,10 @@ impl BinaryOperator for u8 {
     }
 }
 
+pub fn combined_u8(first: u8, second: u8) -> u16 {
+    ((first as u16) << 8) | (second as u16)
+}
+
 #[cfg(test)]
 pub fn split_u16_to_u8(value: u16) -> (u8, u8) {
     let high_byte = (value >> 8) as u8;

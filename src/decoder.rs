@@ -1,6 +1,6 @@
 use num_enum::TryFromPrimitive;
 
-use crate::binary::BinaryOperator;
+use crate::binary::{combined_u8, BinaryOperator};
 
 #[repr(u8)]
 #[derive(PartialEq, Debug)]
@@ -19,6 +19,7 @@ enum WordByteOperation {
 #[derive(PartialEq, Debug)]
 enum OpCode {
     RmToOrFromRegister,
+    ImmediateToRegister,
 }
 
 #[repr(u8)]
@@ -33,12 +34,35 @@ enum MovMode {
 pub fn decode(instruction: &Vec<&u8>) -> Option<(String, u8)> {
     let first_byte = instruction.first();
     let opcode = decode_opcode(first_byte.unwrap());
+    let instruction_deref = instruction.iter().map(|x| **x).collect::<Vec<u8>>();
     match opcode {
-        Ok(OpCode::RmToOrFromRegister) => {
-            decode_rm_toorfrom_reg(&instruction.iter().map(|x| **x).collect::<Vec<u8>>())
-        }
+        Ok(OpCode::RmToOrFromRegister) => decode_rm_toorfrom_reg(&instruction_deref),
+        Ok(OpCode::ImmediateToRegister) => decode_immediate_to_register(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
+}
+
+fn decode_immediate_to_register(instruction: &Vec<u8>) -> Option<(String, u8)> {
+    let opcode = "mov";
+    let first_byte = *instruction.first().unwrap();
+    let register_bits = first_byte % 8;
+    let (word_byte_operation, bit_consumed) = if (first_byte & 0b00001000) == 0b00001000 {
+        (WordByteOperation::Word, 3u8)
+    } else {
+        (WordByteOperation::Byte, 2u8)
+    };
+
+    let second_byte = *instruction.get(1).unwrap();
+    let immediate: u16 = if word_byte_operation == WordByteOperation::Byte {
+        second_byte.into()
+    } else {
+        let third_byte = *instruction.get(2).unwrap();
+        combined_u8(second_byte, third_byte)
+    };
+    let reg = decode_register(&register_bits, word_byte_operation);
+
+    let result = format!("{} {}, {}", opcode, reg.to_lowercase(), immediate);
+    Some((result, bit_consumed))
 }
 
 // Return instruction and bytes consumed
@@ -76,8 +100,11 @@ fn decode_mov_mode(second_byte: &u8) -> Option<MovMode> {
 
 fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     const RM_TO_FROM_REGISTER: u8 = 0b100010;
+    const IMMEDIATE_REGISTER: u8 = 0b1011;
     if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) {
         return Ok(OpCode::RmToOrFromRegister);
+    } else if first_byte.binary_starts_with(IMMEDIATE_REGISTER) {
+        return Ok(OpCode::ImmediateToRegister);
     }
     Err("Invalid Opcode".to_string())
 }
@@ -136,7 +163,7 @@ fn decode_rm_field(
             if effective_address == "bp" {
                 let third_byte = third_byte.unwrap();
                 let fourth_byte = fourth_byte.unwrap();
-                let value = ((*third_byte as u16) << 8) | (*fourth_byte as u16);
+                let value = combined_u8(*third_byte, *fourth_byte);
                 return (format!("[{}]", value), 4);
             }
             (format!("[{}]", effective_address), 2)
@@ -190,6 +217,14 @@ mod tests {
 
     use super::*;
 
+    #[test]
+    fn simple_immeidate_to_register() {
+        let encoded_instruction = vec![177u8, 12, 181, 244];
+        let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
+
+        assert_eq!("mov cl, 12", decoded_instruction.0);
+        assert_eq!(2, decoded_instruction.1);
+    }
     #[test]
     fn simple_mod11_instruction() {
         let encoded_instruction = vec![137u8, 217];
