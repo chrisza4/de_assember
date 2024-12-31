@@ -44,11 +44,12 @@ fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
+    let fourth_byte = instruction.get(3);
     let opcode = "mov";
     match (first_byte, second_byte) {
         (Some(first_byte), Some(second_byte)) => {
             let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
-            let rm_result = decode_rm_field(first_byte, second_byte, third_byte, None);
+            let rm_result = decode_rm_field(first_byte, second_byte, third_byte, fourth_byte);
             let rm = rm_result.0.to_lowercase();
             let bit_consumed = rm_result.1;
             let direction = decode_register_direction(first_byte);
@@ -115,6 +116,13 @@ fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, f
             let third_byte = third_byte.unwrap();
             (format!("[{} + {}]", effective_address, third_byte), 3)
         }
+        Some(MovMode::Memory16Bit) => {
+            let effective_address = decode_effective_address(&second_byte);
+            let third_byte = third_byte.unwrap();
+            let fourth_byte = fourth_byte.unwrap();
+            let value = ((*third_byte as u16) << 8) | (*fourth_byte as u16);
+            (format!("[{} + {}]", effective_address, value), 3)
+        }
         _ => panic!("Unsupported mov mode")
     }
 }
@@ -159,6 +167,8 @@ fn decode_register(register_bits: &u8, word_byte_operation: WordByteOperation) -
 
 #[cfg(test)]
 mod tests {
+    use crate::binary::split_u16_to_u8;
+
     use super::*;
 
     #[test]
@@ -178,6 +188,18 @@ mod tests {
         let encoded_instruction = vec![first, second, third];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
         assert_eq!("mov al, [bx + si + 20]", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+    }
+
+    #[test]
+    fn simple_mod10_instruction() {
+        let first = 0b10001010;
+        let second = 0b10000000;
+        let value: u16 = 5432;
+        let (third, fourth) = split_u16_to_u8(value);
+        let encoded_instruction = vec![first, second, third, fourth];
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        assert_eq!("mov al, [bx + si + 5432]", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
     }
 

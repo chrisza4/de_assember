@@ -9,6 +9,13 @@ impl BinaryOperator for u8 {
     }
 }
 
+pub fn split_u16_to_u8(value: u16) -> (u8, u8) {
+    let high_byte = (value >> 8) as u8;
+    let low_byte = (value & 0xFF) as u8;
+    (high_byte, low_byte)
+}
+
+
 
 #[cfg(test)]
 mod tests {
