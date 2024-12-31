@@ -208,7 +208,7 @@ fn decode_rm_field(
             if effective_address == "bp" {
                 let third_byte = third_byte.unwrap();
                 let fourth_byte = fourth_byte.unwrap();
-                let value = combined_u8(*third_byte, *fourth_byte);
+                let value = combined_u8(*fourth_byte, *third_byte);
                 return (format!("[{}]", value), 4);
             }
             (format!("[{}]", effective_address), 2)
@@ -365,7 +365,7 @@ mod tests {
         let first = 0b10001011;
         let second = 0b00101110;
         let value: u16 = 3458;
-        let (third, fourth) = split_u16_to_u8(value);
+        let (fourth, third) = split_u16_to_u8(value);
         let encoded_instruction = vec![first, second, third, fourth];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
 
