@@ -42,11 +42,12 @@ pub fn decode(instruction: &[u8]) -> Option<String> {
 fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<String> {
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
+    let third_byte = instruction.get(2);
     let opcode = "mov";
     match (first_byte, second_byte) {
         (Some(first_byte), Some(second_byte)) => {
             let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
-            let rm = decode_rm_field(first_byte, second_byte).to_lowercase();
+            let rm = decode_rm_field(first_byte, second_byte, third_byte, None).to_lowercase();
             let direction = decode_register_direction(first_byte);
             if direction == RegisterDirection::SourceInRegField {
                 let result = format!("{} {}, {}", opcode, rm, reg);
@@ -100,14 +101,34 @@ fn decode_reg_field(first_byte: &u8, second_byte: &u8) -> String {
     decode_register(&register_bits, word_byte_operation)
 }
 
-fn decode_rm_field(first_byte: &u8, second_byte: &u8) -> String {
+fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, fourth_byte: Option<&u8>) -> String {
     let register_bits = second_byte & 0b00000111;
     let word_byte_operation = decode_wordbyte_operation(first_byte);
     let move_mode = decode_mov_mode(&second_byte);
     match move_mode {
         Some(MovMode::RegisterToRegister) => decode_register(&register_bits, word_byte_operation),
+        Some(MovMode::Memory8Bit) => {
+            let effective_address = decode_effective_address(&second_byte);
+            let third_byte = third_byte.unwrap();
+            format!("[{} + {}]", effective_address, third_byte)
+        }
         _ => panic!("Unsupported mov mode")
     }
+}
+
+fn decode_effective_address(second_byte: &u8) -> String {
+    let rm_bits = second_byte << 5;
+    match rm_bits {
+        0b000 => "bx + si",
+        0b001 => "bx + di",
+        0b010 => "bp + si",
+        0b011 => "bp + di",
+        0b100 => "si",
+        0b101 => "di",
+        0b110 => "bp",
+        0b111 => "bx",
+        _ => ""
+    }.to_string()
 }
 
 fn decode_register(register_bits: &u8, word_byte_operation: WordByteOperation) -> String {
@@ -146,7 +167,7 @@ mod tests {
 
     #[test]
     fn simple_mod01_instruction() {
-        let first = 0b10001000;
+        let first = 0b10001010;
         let second = 0b01000000;
         let third: u8 = 20;
         let encoded_instruction = vec![first, second, third];
@@ -263,69 +284,69 @@ mod tests {
         let first_byte_with_byte_mode: u8 = 0b10001000;
         assert_eq!(
             "AL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000000)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000000, None, None)
         );
         assert_eq!(
             "CL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000001)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000001, None, None)
         );
         assert_eq!(
             "DL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000010)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000010, None, None)
         );
         assert_eq!(
             "BL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000011)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000011, None, None)
         );
         assert_eq!(
             "AH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000100)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000100, None, None)
         );
         assert_eq!(
             "CH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000101)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000101, None, None)
         );
         assert_eq!(
             "DH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000110)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000110, None, None)
         );
         assert_eq!(
             "BH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000111)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000111, None, None)
         );
 
         let first_byte_with_word_mode: u8 = 0b10001001;
         assert_eq!(
             "AX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000000)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000000, None, None)
         );
         assert_eq!(
             "CX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000001)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000001, None, None)
         );
         assert_eq!(
             "DX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000010)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000010, None, None)
         );
         assert_eq!(
             "BX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000011)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000011, None, None)
         );
         assert_eq!(
             "SP",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000100)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000100, None, None)
         );
         assert_eq!(
             "BP",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000101)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000101, None, None)
         );
         assert_eq!(
             "SI",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000110)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000110, None, None)
         );
         assert_eq!(
             "DI",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000111)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000111, None, None)
         );
     }
 }
