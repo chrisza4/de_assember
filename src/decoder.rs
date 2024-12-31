@@ -18,7 +18,7 @@ enum WordByteOperation {
 
 #[derive(PartialEq, Debug)]
 enum OpCode {
-    RmToOrFromRegister
+    RmToOrFromRegister,
 }
 
 #[repr(u8)]
@@ -27,38 +27,40 @@ enum MovMode {
     MemoryNoDisplacement = 0,
     Memory8Bit = 1,
     Memory16Bit = 2,
-    RegisterToRegister = 3
+    RegisterToRegister = 3,
 }
 
-pub fn decode(instruction: &[u8]) -> Option<String> {
+pub fn decode(instruction: &Vec<&u8>) -> Option<(String, u8)> {
     let first_byte = instruction.first();
-    let opcode = decode_opcode(&first_byte.unwrap());
+    let opcode = decode_opcode(first_byte.unwrap());
     match opcode {
-        Ok(OpCode::RmToOrFromRegister) => Some(decode_rm_toorfrom_reg(&instruction).unwrap().0),
-        Err(e) => panic!("{}", e)
+        Ok(OpCode::RmToOrFromRegister) => {
+            decode_rm_toorfrom_reg(&instruction.iter().map(|x| **x).collect::<Vec<u8>>())
+        }
+        Err(e) => panic!("{}", e),
     }
 }
 
 // Return instruction and bytes consumed
-fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
+fn decode_rm_toorfrom_reg(instruction: &Vec<u8>) -> Option<(String, u8)> {
+    let opcode = "mov";
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
     let fourth_byte = instruction.get(3);
-    let opcode = "mov";
     match (first_byte, second_byte) {
         (Some(first_byte), Some(second_byte)) => {
             let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
             let rm_result = decode_rm_field(first_byte, second_byte, third_byte, fourth_byte);
             let rm = rm_result.0.to_lowercase();
-            let bit_consumed = rm_result.1;
+            let bytes_consumed = rm_result.1;
             let direction = decode_register_direction(first_byte);
             if direction == RegisterDirection::SourceInRegField {
                 let result = format!("{} {}, {}", opcode, rm, reg);
-                Some((result, bit_consumed))
+                Some((result, bytes_consumed))
             } else {
                 let result = format!("{} {}, {}", opcode, reg, rm);
-                Some((result, bit_consumed))
+                Some((result, bytes_consumed))
             }
         }
         _ => None,
@@ -68,7 +70,7 @@ fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
 fn decode_mov_mode(second_byte: &u8) -> Option<MovMode> {
     match MovMode::try_from_primitive(second_byte >> 6) {
         Ok(e) => Some(e),
-        Err(_) => None
+        Err(_) => None,
     }
 }
 
@@ -79,7 +81,6 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     }
     Err("Invalid Opcode".to_string())
 }
-
 
 fn decode_register_direction(first_byte: &u8) -> RegisterDirection {
     let direction_bit = 0b10;
@@ -105,12 +106,19 @@ fn decode_reg_field(first_byte: &u8, second_byte: &u8) -> String {
     decode_register(&register_bits, word_byte_operation)
 }
 
-fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, fourth_byte: Option<&u8>) -> (String, u8) {
+fn decode_rm_field(
+    first_byte: &u8,
+    second_byte: &u8,
+    third_byte: Option<&u8>,
+    fourth_byte: Option<&u8>,
+) -> (String, u8) {
     let register_bits = second_byte & 0b00000111;
     let word_byte_operation = decode_wordbyte_operation(first_byte);
     let move_mode = decode_mov_mode(&second_byte);
     match move_mode {
-        Some(MovMode::RegisterToRegister) => (decode_register(&register_bits, word_byte_operation), 2),
+        Some(MovMode::RegisterToRegister) => {
+            (decode_register(&register_bits, word_byte_operation), 2)
+        }
         Some(MovMode::Memory8Bit) => {
             let effective_address = decode_effective_address(&second_byte);
             let third_byte = third_byte.unwrap();
@@ -123,12 +131,22 @@ fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, f
             let value = ((*third_byte as u16) << 8) | (*fourth_byte as u16);
             (format!("[{} + {}]", effective_address, value), 4)
         }
-        _ => panic!("Unsupported mov mode")
+        Some(MovMode::MemoryNoDisplacement) => {
+            let effective_address = decode_effective_address(&second_byte);
+            if effective_address == "bp" {
+                let third_byte = third_byte.unwrap();
+                let fourth_byte = fourth_byte.unwrap();
+                let value = ((*third_byte as u16) << 8) | (*fourth_byte as u16);
+                return (format!("[{}]", value), 4);
+            }
+            (format!("[{}]", effective_address), 2)
+        }
+        _ => panic!("Unsupported mov mode"),
     }
 }
 
 fn decode_effective_address(second_byte: &u8) -> String {
-    let rm_bits = second_byte << 5;
+    let rm_bits = second_byte % 8;
     match rm_bits {
         0b000 => "bx + si",
         0b001 => "bx + di",
@@ -138,8 +156,9 @@ fn decode_effective_address(second_byte: &u8) -> String {
         0b101 => "di",
         0b110 => "bp",
         0b111 => "bx",
-        _ => ""
-    }.to_string()
+        _ => "",
+    }
+    .to_string()
 }
 
 fn decode_register(register_bits: &u8, word_byte_operation: WordByteOperation) -> String {
@@ -175,7 +194,7 @@ mod tests {
     fn simple_mod11_instruction() {
         let encoded_instruction = vec![137u8, 217];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
-        
+
         assert_eq!("mov cx, bx", decoded_instruction.0);
         assert_eq!(2, decoded_instruction.1);
     }
@@ -188,6 +207,14 @@ mod tests {
         let encoded_instruction = vec![first, second, third];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
         assert_eq!("mov al, [bx + si + 20]", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+
+        let first = 0b10001010;
+        let second = 0b01000001;
+        let third: u8 = 20;
+        let encoded_instruction = vec![first, second, third];
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        assert_eq!("mov al, [bx + di + 20]", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
     }
 
@@ -211,6 +238,29 @@ mod tests {
         let encoded_instruction = vec![first, second, third, fourth];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
         assert_eq!("mov al, [bx + si + 5432]", decoded_instruction.0);
+        assert_eq!(4, decoded_instruction.1);
+    }
+
+    #[test]
+    fn simple_mod00_instruction() {
+        let first = 0b10001010;
+        let second = 0b00000000;
+        let encoded_instruction = vec![first, second];
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        assert_eq!("mov al, [bx + si]", decoded_instruction.0);
+        assert_eq!(2, decoded_instruction.1);
+    }
+
+    #[test]
+    fn mod00_direct_address_instruction() {
+        let first = 0b10001011;
+        let second = 0b00101110;
+        let value: u16 = 3458;
+        let (third, fourth) = split_u16_to_u8(value);
+        let encoded_instruction = vec![first, second, third, fourth];
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+
+        assert_eq!("mov bp, [3458]", decoded_instruction.0);
         assert_eq!(4, decoded_instruction.1);
     }
 

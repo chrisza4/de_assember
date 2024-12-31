@@ -1,12 +1,12 @@
+use assembler::decode_asm_binary;
 use std::env;
 use std::fs;
 use std::io;
 use std::process::Command;
-use assember::decode_asm_binary;
 
-mod assember;
-mod decoder;
+mod assembler;
 mod binary;
+mod decoder;
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.get(1).is_none() {
@@ -15,7 +15,7 @@ fn main() -> io::Result<()> {
     let file_path = args.get(1).unwrap();
 
     let contents = fs::read(file_path);
-    
+
     match contents {
         Ok(contents) => {
             let de_asm_content = decode_asm_binary(&contents);
@@ -41,6 +41,6 @@ fn write_and_validate_result(original_contents: &Vec<u8>, de_asm_content: &Strin
                 println!("\nError: Difference between new and old assembly");
             }
         }
-        Err(err) => println!("Error: {}", err)
+        Err(err) => println!("Error: {}", err),
     }
 }
