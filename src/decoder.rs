@@ -121,7 +121,7 @@ fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, f
             let third_byte = third_byte.unwrap();
             let fourth_byte = fourth_byte.unwrap();
             let value = ((*third_byte as u16) << 8) | (*fourth_byte as u16);
-            (format!("[{} + {}]", effective_address, value), 3)
+            (format!("[{} + {}]", effective_address, value), 4)
         }
         _ => panic!("Unsupported mov mode")
     }
@@ -192,6 +192,17 @@ mod tests {
     }
 
     #[test]
+    fn simple_mod01_memory_destination_instruction() {
+        let first = 0b10001000;
+        let second = 0b01000000;
+        let third: u8 = 20;
+        let encoded_instruction = vec![first, second, third];
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        assert_eq!("mov [bx + si + 20], al", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+    }
+
+    #[test]
     fn simple_mod10_instruction() {
         let first = 0b10001010;
         let second = 0b10000000;
@@ -200,7 +211,7 @@ mod tests {
         let encoded_instruction = vec![first, second, third, fourth];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
         assert_eq!("mov al, [bx + si + 5432]", decoded_instruction.0);
-        assert_eq!(3, decoded_instruction.1);
+        assert_eq!(4, decoded_instruction.1);
     }
 
     #[test]
