@@ -39,7 +39,7 @@ pub fn decode(instruction: &[u8]) -> Option<String> {
     }
 }
 
-// Return instruction and bytes
+// Return instruction and bytes consumed
 fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
@@ -48,14 +48,16 @@ fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
     match (first_byte, second_byte) {
         (Some(first_byte), Some(second_byte)) => {
             let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
-            let rm = decode_rm_field(first_byte, second_byte, third_byte, None).to_lowercase();
+            let rm_result = decode_rm_field(first_byte, second_byte, third_byte, None);
+            let rm = rm_result.0.to_lowercase();
+            let bit_consumed = rm_result.1;
             let direction = decode_register_direction(first_byte);
             if direction == RegisterDirection::SourceInRegField {
                 let result = format!("{} {}, {}", opcode, rm, reg);
-                Some((result, 2))
+                Some((result, bit_consumed))
             } else {
                 let result = format!("{} {}, {}", opcode, reg, rm);
-                Some((result, 2))
+                Some((result, bit_consumed))
             }
         }
         _ => None,
@@ -102,16 +104,16 @@ fn decode_reg_field(first_byte: &u8, second_byte: &u8) -> String {
     decode_register(&register_bits, word_byte_operation)
 }
 
-fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, fourth_byte: Option<&u8>) -> String {
+fn decode_rm_field(first_byte: &u8, second_byte: &u8, third_byte: Option<&u8>, fourth_byte: Option<&u8>) -> (String, u8) {
     let register_bits = second_byte & 0b00000111;
     let word_byte_operation = decode_wordbyte_operation(first_byte);
     let move_mode = decode_mov_mode(&second_byte);
     match move_mode {
-        Some(MovMode::RegisterToRegister) => decode_register(&register_bits, word_byte_operation),
+        Some(MovMode::RegisterToRegister) => (decode_register(&register_bits, word_byte_operation), 2),
         Some(MovMode::Memory8Bit) => {
             let effective_address = decode_effective_address(&second_byte);
             let third_byte = third_byte.unwrap();
-            format!("[{} + {}]", effective_address, third_byte)
+            (format!("[{} + {}]", effective_address, third_byte), 3)
         }
         _ => panic!("Unsupported mov mode")
     }
@@ -288,69 +290,69 @@ mod tests {
         let first_byte_with_byte_mode: u8 = 0b10001000;
         assert_eq!(
             "AL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000000, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000000, None, None).0
         );
         assert_eq!(
             "CL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000001, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000001, None, None).0
         );
         assert_eq!(
             "DL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000010, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000010, None, None).0
         );
         assert_eq!(
             "BL",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000011, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000011, None, None).0
         );
         assert_eq!(
             "AH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000100, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000100, None, None).0
         );
         assert_eq!(
             "CH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000101, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000101, None, None).0
         );
         assert_eq!(
             "DH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000110, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000110, None, None).0
         );
         assert_eq!(
             "BH",
-            decode_rm_field(&first_byte_with_byte_mode, &0b11000111, None, None)
+            decode_rm_field(&first_byte_with_byte_mode, &0b11000111, None, None).0
         );
 
         let first_byte_with_word_mode: u8 = 0b10001001;
         assert_eq!(
             "AX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000000, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000000, None, None).0
         );
         assert_eq!(
             "CX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000001, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000001, None, None).0
         );
         assert_eq!(
             "DX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000010, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000010, None, None).0
         );
         assert_eq!(
             "BX",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000011, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000011, None, None).0
         );
         assert_eq!(
             "SP",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000100, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000100, None, None).0
         );
         assert_eq!(
             "BP",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000101, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000101, None, None).0
         );
         assert_eq!(
             "SI",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000110, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000110, None, None).0
         );
         assert_eq!(
             "DI",
-            decode_rm_field(&first_byte_with_word_mode, &0b11000111, None, None)
+            decode_rm_field(&first_byte_with_word_mode, &0b11000111, None, None).0
         );
     }
 }
