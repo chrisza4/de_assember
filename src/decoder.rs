@@ -1,3 +1,4 @@
+
 #[repr(u8)]
 #[derive(PartialEq, Debug)]
 enum RegisterDirection {
@@ -12,12 +13,26 @@ enum WordByteOperation {
     Word = 1,
 }
 
+#[derive(PartialEq, Debug)]
+enum OpCode {
+    RmToOrFromRegister
+}
+
 pub fn decode(instruction: &[u8]) -> Option<String> {
     let first_byte = instruction.first();
+    let opcode = decode_opcode(&first_byte.unwrap());
+    match opcode {
+        Ok(OpCode::RmToOrFromRegister) => decode_rm_toorfrom_reg(&instruction),
+        Err(e) => panic!("{}", e)
+    }
+}
+
+fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<String> {
+    let first_byte = instruction.first();
     let second_byte = instruction.get(1);
+    let opcode = "mov";
     match (first_byte, second_byte) {
         (Some(first_byte), Some(second_byte)) => {
-            let opcode = decode_opcode(first_byte);
             let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
             let rm = decode_rm_field(first_byte, second_byte).to_lowercase();
             let direction = decode_register_direction(first_byte);
@@ -33,14 +48,19 @@ pub fn decode(instruction: &[u8]) -> Option<String> {
     }
 }
 
-fn decode_opcode(first_byte: &u8) -> String {
+fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     let command = first_byte >> 2;
     let mov_command: u8 = 0b100010;
     if command == mov_command {
-        return String::from("mov");
+        return Ok(OpCode::RmToOrFromRegister)
     }
-    String::new()
+    const RM_TO_FROM_REGISTER: u8 = 0b100010;
+    if (first_byte & RM_TO_FROM_REGISTER) == *first_byte {
+        return Ok(OpCode::RmToOrFromRegister);
+    }
+    Err("Invalid Opcode".to_string())
 }
+
 
 fn decode_register_direction(first_byte: &u8) -> RegisterDirection {
     let direction_bit = 0b10;
@@ -108,9 +128,9 @@ mod tests {
 
     #[test]
     fn test_decode_opcode() {
-        assert_eq!("mov", decode_opcode(&0b10001001));
-        assert_eq!("mov", decode_opcode(&0b10001011));
-        assert_eq!("mov", decode_opcode(&0b10001010));
+        assert_eq!(Ok(OpCode::RmToOrFromRegister), decode_opcode(&0b10001001));
+        assert_eq!(Ok(OpCode::RmToOrFromRegister), decode_opcode(&0b10001011));
+        assert_eq!(Ok(OpCode::RmToOrFromRegister), decode_opcode(&0b10001010));
     }
 
     #[test]

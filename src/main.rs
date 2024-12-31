@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::io;
 use std::process::Command;
-
 use assember::decode_asm_binary;
 
 mod assember;
