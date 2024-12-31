@@ -34,12 +34,13 @@ pub fn decode(instruction: &[u8]) -> Option<String> {
     let first_byte = instruction.first();
     let opcode = decode_opcode(&first_byte.unwrap());
     match opcode {
-        Ok(OpCode::RmToOrFromRegister) => decode_rm_toorfrom_reg(&instruction),
+        Ok(OpCode::RmToOrFromRegister) => Some(decode_rm_toorfrom_reg(&instruction).unwrap().0),
         Err(e) => panic!("{}", e)
     }
 }
 
-fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<String> {
+// Return instruction and bytes
+fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
@@ -51,10 +52,10 @@ fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<String> {
             let direction = decode_register_direction(first_byte);
             if direction == RegisterDirection::SourceInRegField {
                 let result = format!("{} {}, {}", opcode, rm, reg);
-                Some(result)
+                Some((result, 2))
             } else {
                 let result = format!("{} {}, {}", opcode, reg, rm);
-                Some(result)
+                Some((result, 2))
             }
         }
         _ => None,
@@ -161,8 +162,10 @@ mod tests {
     #[test]
     fn simple_mod11_instruction() {
         let encoded_instruction = vec![137u8, 217];
-        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction);
-        assert_eq!(Some("mov cx, bx"), decoded_instruction.as_deref())
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        
+        assert_eq!("mov cx, bx", decoded_instruction.0);
+        assert_eq!(2, decoded_instruction.1);
     }
 
     #[test]
@@ -171,8 +174,9 @@ mod tests {
         let second = 0b01000000;
         let third: u8 = 20;
         let encoded_instruction = vec![first, second, third];
-        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction);
-        assert_eq!(Some("mov al, [bx + si + 20]"), decoded_instruction.as_deref())
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        assert_eq!("mov al, [bx + si + 20]", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
     }
 
     #[test]
