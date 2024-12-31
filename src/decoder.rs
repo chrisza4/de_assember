@@ -147,8 +147,12 @@ fn decode_rm_field(
         }
         Some(MovMode::Memory8Bit) => {
             let effective_address = decode_effective_address(&second_byte);
-            let third_byte = third_byte.unwrap();
-            (format!("[{} + {}]", effective_address, third_byte), 3)
+            let third_byte = *third_byte.unwrap() as i8;
+            let sign = if third_byte >= 0 { '+' } else { '-' };
+            (
+                format!("[{} {} {}]", effective_address, sign, third_byte.abs()),
+                3,
+            )
         }
         Some(MovMode::Memory16Bit) => {
             let effective_address = decode_effective_address(&second_byte);
@@ -260,6 +264,17 @@ mod tests {
         let encoded_instruction = vec![first, second, third];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
         assert_eq!("mov [bx + si + 20], al", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+    }
+
+    #[test]
+    fn simple_mod01_minus_value() {
+        let first = 0b10001000;
+        let second = 0b01000000;
+        let third: u8 = (-1i8) as u8;
+        let encoded_instruction = vec![first, second, third];
+        let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
+        assert_eq!("mov [bx + si - 1], al", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
     }
 
