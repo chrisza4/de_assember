@@ -9,25 +9,24 @@ impl BinaryOperator for u8 {
     }
 }
 
+#[cfg(test)]
 pub fn split_u16_to_u8(value: u16) -> (u8, u8) {
     let high_byte = (value >> 8) as u8;
     let low_byte = (value & 0xFF) as u8;
     (high_byte, low_byte)
 }
 
-
-
 #[cfg(test)]
 mod tests {
-  use super::*;
+    use super::*;
 
-  #[test]
-  fn simple_instruction() {
-      let input: u8 = 0b10001001;
-      assert!(input.binary_starts_with(0b10));
-      assert!(input.binary_starts_with(0b1));
-      assert!(input.binary_starts_with(0b100));
-      assert!(input.binary_starts_with(0b10001));
-      assert!(!input.binary_starts_with(0b1111));
-  }
+    #[test]
+    fn simple_instruction() {
+        let input: u8 = 0b10001001;
+        assert!(input.binary_starts_with(0b10));
+        assert!(input.binary_starts_with(0b1));
+        assert!(input.binary_starts_with(0b100));
+        assert!(input.binary_starts_with(0b10001));
+        assert!(!input.binary_starts_with(0b1111));
+    }
 }
