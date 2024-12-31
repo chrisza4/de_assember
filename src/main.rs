@@ -6,6 +6,7 @@ use assember::decode_asm_binary;
 
 mod assember;
 mod decoder;
+mod binary;
 fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.get(1).is_none() {

@@ -1,3 +1,5 @@
+use crate::binary::BinaryOperator;
+
 
 #[repr(u8)]
 #[derive(PartialEq, Debug)]
@@ -49,13 +51,8 @@ fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<String> {
 }
 
 fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
-    let command = first_byte >> 2;
-    let mov_command: u8 = 0b100010;
-    if command == mov_command {
-        return Ok(OpCode::RmToOrFromRegister)
-    }
     const RM_TO_FROM_REGISTER: u8 = 0b100010;
-    if (first_byte & RM_TO_FROM_REGISTER) == *first_byte {
+    if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) {
         return Ok(OpCode::RmToOrFromRegister);
     }
     Err("Invalid Opcode".to_string())
