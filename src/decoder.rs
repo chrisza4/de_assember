@@ -57,10 +57,9 @@ fn decode_immediate_to_register(instruction: &Vec<u8>) -> Option<(String, u8)> {
         second_byte.into()
     } else {
         let third_byte = *instruction.get(2).unwrap();
-        combined_u8(second_byte, third_byte)
+        combined_u8(third_byte, second_byte)
     };
     let reg = decode_register(&register_bits, word_byte_operation);
-
     let result = format!("{} {}, {}", opcode, reg.to_lowercase(), immediate);
     Some((result, bit_consumed))
 }
@@ -155,7 +154,7 @@ fn decode_rm_field(
             let effective_address = decode_effective_address(&second_byte);
             let third_byte = third_byte.unwrap();
             let fourth_byte = fourth_byte.unwrap();
-            let value = ((*third_byte as u16) << 8) | (*fourth_byte as u16);
+            let value = combined_u8(*fourth_byte, *third_byte);
             (format!("[{} + {}]", effective_address, value), 4)
         }
         Some(MovMode::MemoryNoDisplacement) => {
@@ -269,7 +268,7 @@ mod tests {
         let first = 0b10001010;
         let second = 0b10000000;
         let value: u16 = 5432;
-        let (third, fourth) = split_u16_to_u8(value);
+        let (fourth, third) = split_u16_to_u8(value);
         let encoded_instruction = vec![first, second, third, fourth];
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
         assert_eq!("mov al, [bx + si + 5432]", decoded_instruction.0);
