@@ -21,6 +21,8 @@ enum OpCode {
     RmToOrFromRegister,
     ImmediateToRegister,
     ImmediateToRegisterOrMemory,
+    MemoryToAccumulator,
+    AccumulatorToMemory,
 }
 
 #[repr(u8)]
@@ -42,6 +44,8 @@ pub fn decode(instruction: &Vec<&u8>) -> Option<(String, u8)> {
         Ok(OpCode::ImmediateToRegisterOrMemory) => {
             decode_immediate_to_register_or_memory(&instruction_deref)
         }
+        Ok(OpCode::MemoryToAccumulator) => decode_mem_to_accumulator(&instruction_deref),
+        Ok(OpCode::AccumulatorToMemory) => decode_accumulator_to_mem(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
 }
@@ -130,6 +134,46 @@ fn decode_rm_toorfrom_reg(instruction: &Vec<u8>) -> Option<(String, u8)> {
     }
 }
 
+fn decode_mem_to_accumulator(instruction: &Vec<u8>) -> Option<(String, u8)> {
+    let first_byte = instruction.first().unwrap();
+    let second_byte = instruction.get(1);
+    let third_byte = instruction.get(2);
+
+    let word_byte_operation = if (first_byte & 1) == 0 {
+        WordByteOperation::Byte
+    } else {
+        WordByteOperation::Word
+    };
+
+    let address = if word_byte_operation == WordByteOperation::Word {
+        combined_u8(*third_byte.unwrap(), *second_byte.unwrap())
+    } else {
+        *second_byte.unwrap() as u16
+    };
+
+    Some((format!("mov ax, [{}]", address), 3))
+}
+
+fn decode_accumulator_to_mem(instruction: &Vec<u8>) -> Option<(String, u8)> {
+    let first_byte = instruction.first().unwrap();
+    let second_byte = instruction.get(1);
+    let third_byte = instruction.get(2);
+
+    let word_byte_operation = if (first_byte & 1) == 0 {
+        WordByteOperation::Byte
+    } else {
+        WordByteOperation::Word
+    };
+
+    let address = if word_byte_operation == WordByteOperation::Word {
+        combined_u8(*third_byte.unwrap(), *second_byte.unwrap())
+    } else {
+        *second_byte.unwrap() as u16
+    };
+
+    Some((format!("mov [{}], ax", address), 3))
+}
+
 fn decode_mov_mode(second_byte: &u8) -> Option<MovMode> {
     match MovMode::try_from_primitive(second_byte >> 6) {
         Ok(e) => Some(e),
@@ -141,12 +185,18 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     const RM_TO_FROM_REGISTER: u8 = 0b100010;
     const IMMEDIATE_TO_REGISTER: u8 = 0b1011;
     const IMMEDIATE_TO_REGISTER_OR_MEMORY: u8 = 0b1100011;
+    const MEMORY_TO_ACCUMULATOR: u8 = 0b1010000;
+    const ACCUMULATOR_TO_MEMORY: u8 = 0b1010001;
     if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) {
         return Ok(OpCode::RmToOrFromRegister);
     } else if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER) {
         return Ok(OpCode::ImmediateToRegister);
     } else if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER_OR_MEMORY) {
         return Ok(OpCode::ImmediateToRegisterOrMemory);
+    } else if first_byte.binary_starts_with(MEMORY_TO_ACCUMULATOR) {
+        return Ok(OpCode::MemoryToAccumulator);
+    } else if first_byte.binary_starts_with(ACCUMULATOR_TO_MEMORY) {
+        return Ok(OpCode::AccumulatorToMemory);
     }
     Err("Invalid Opcode".to_string())
 }
@@ -350,7 +400,6 @@ mod tests {
         assert_eq!(3, decoded_instruction.1);
     }
 
-    #[ignore = "Wait"]
     #[test]
     fn immediate_to_register_instruction_word() {
         let encoded_instruction = vec![199, 133, 133, 3, 91, 1];
@@ -359,7 +408,32 @@ mod tests {
         assert_eq!(6, decoded_instruction.1);
     }
 
-    // [198, 3, 7]
+    #[test]
+    fn test_memory_to_accumulator() {
+        let encoded_instruction = vec![161, 251, 9];
+        let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
+        assert_eq!("mov ax, [2555]", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+
+        let encoded_instruction = vec![161, 16, 0];
+        let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
+        assert_eq!("mov ax, [16]", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+    }
+
+    #[test]
+    fn test_accumulator_to_memory() {
+        let encoded_instruction = vec![163, 15, 0];
+        let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
+        assert_eq!("mov [15], ax", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+
+        let encoded_instruction = vec![163, 250, 9];
+        let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
+        assert_eq!("mov [2554], ax", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+    }
+
     #[test]
     fn mod00_direct_address_instruction() {
         let first = 0b10001011;
