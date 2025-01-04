@@ -13,7 +13,6 @@ pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError
                 result.insert(register.to_string(), val);
             }
             Ok(Assembly::Mov(register, RegisterOrValue::Register(from_reg))) => {
-              println!("=== {:?}, reg: {:?}", result, from_reg);
                 let val = result.get(&from_reg).unwrap();
 
                 result.insert(register.to_string(), *val);
