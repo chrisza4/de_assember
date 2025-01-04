@@ -80,10 +80,10 @@ fn decode_immediate_to_register_or_memory(instruction: &Vec<u8>) -> Option<(Stri
         "byte"
     };
 
-    return Some((
+    Some((
         format!("{} {}, {} {}", OPCODE, register, identifier, value),
         bit_consumed_on_data + bit_consumed_on_rm,
-    ));
+    ))
 }
 
 fn decode_immediate_to_register(instruction: &Vec<u8>) -> Option<(String, u8)> {
@@ -234,13 +234,13 @@ fn decode_rm_field(
     fourth_byte: Option<&u8>,
 ) -> (String, u8) {
     let register_bits = second_byte & 0b00000111;
-    let move_mode = decode_mov_mode(&second_byte);
+    let move_mode = decode_mov_mode(second_byte);
     match move_mode {
         Some(MovMode::RegisterToRegister) => {
             (decode_register(&register_bits, word_byte_operation), 2)
         }
         Some(MovMode::Memory8Bit) => {
-            let effective_address = decode_effective_address(&second_byte);
+            let effective_address = decode_effective_address(second_byte);
             let third_byte = *third_byte.unwrap() as i8;
             let sign = if third_byte >= 0 { '+' } else { '-' };
             (
@@ -249,14 +249,14 @@ fn decode_rm_field(
             )
         }
         Some(MovMode::Memory16Bit) => {
-            let effective_address = decode_effective_address(&second_byte);
+            let effective_address = decode_effective_address(second_byte);
             let third_byte = third_byte.unwrap();
             let fourth_byte = fourth_byte.unwrap();
             let value = combined_u8(*fourth_byte, *third_byte);
             (format!("[{} + {}]", effective_address, value), 4)
         }
         Some(MovMode::MemoryNoDisplacement) => {
-            let effective_address = decode_effective_address(&second_byte);
+            let effective_address = decode_effective_address(second_byte);
             if effective_address == "bp" {
                 let third_byte = third_byte.unwrap();
                 let fourth_byte = fourth_byte.unwrap();
@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn simple_immeidate_to_register() {
-        let encoded_instruction = vec![177u8, 12, 181, 244];
+        let encoded_instruction = [177u8, 12, 181, 244];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
 
         assert_eq!("mov cl, 12", decoded_instruction.0);
@@ -395,7 +395,7 @@ mod tests {
 
     #[test]
     fn immediate_to_register_instruction_byte() {
-        let encoded_instruction = vec![198u8, 3, 7];
+        let encoded_instruction = [198u8, 3, 7];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
         assert_eq!("mov [bp + di], byte 7", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
@@ -403,7 +403,7 @@ mod tests {
 
     #[test]
     fn immediate_to_register_instruction_word() {
-        let encoded_instruction = vec![199, 133, 133, 3, 91, 1];
+        let encoded_instruction = [199, 133, 133, 3, 91, 1];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
         assert_eq!("mov [di + 901], word 347", decoded_instruction.0);
         assert_eq!(6, decoded_instruction.1);
@@ -411,12 +411,12 @@ mod tests {
 
     #[test]
     fn test_memory_to_accumulator() {
-        let encoded_instruction = vec![161, 251, 9];
+        let encoded_instruction = [161, 251, 9];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
         assert_eq!("mov ax, [2555]", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
 
-        let encoded_instruction = vec![161, 16, 0];
+        let encoded_instruction = [161, 16, 0];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
         assert_eq!("mov ax, [16]", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
@@ -424,12 +424,12 @@ mod tests {
 
     #[test]
     fn test_accumulator_to_memory() {
-        let encoded_instruction = vec![163, 15, 0];
+        let encoded_instruction = [163, 15, 0];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
         assert_eq!("mov [15], ax", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
 
-        let encoded_instruction = vec![163, 250, 9];
+        let encoded_instruction = [163, 250, 9];
         let decoded_instruction = decode(&encoded_instruction.iter().collect()).unwrap();
         assert_eq!("mov [2554], ax", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
