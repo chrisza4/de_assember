@@ -2,15 +2,20 @@ use std::collections::HashMap;
 
 pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError> {
   let mut result = HashMap::<String, u16>::new();
-  let assembly = parse_assembly_code(code);
-  match assembly {
-    Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
-      result.insert(register.to_string(), val);
-      Ok(result)
-    },
-    Err(e) => Err(e),
-    _ => Err(ParseAssemblyError::Unknown)
+  let lines = code.split('\n');
+  for line in lines {
+    if line.trim().is_empty() {
+      continue;
+    }
+    let assembly = parse_assembly_code(line);
+    match assembly {
+      Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
+        result.insert(register.to_string(), val);
+      },
+      Err(e) => return Err(e),
+    }
   }
+  Ok(result)
 }
 
 enum RegisterOrValue {
@@ -28,10 +33,9 @@ pub enum ParseAssemblyError {
   Unknown
 } 
 
-fn parse_assembly_code(code: String) -> Result<Assembly, ParseAssemblyError> {
-  let command_and_params = code.split_once(' ');
-  let command = command_and_params.map(|x| x.0).unwrap_or(code.as_str());
-  
+fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
+  let command_and_params = code.trim().split_once(' ');
+  let command = command_and_params.map(|x| x.0).unwrap_or(code);
   match command {
     "mov" => {
       let Some(params) = command_and_params.map(|x| x.1) else {
@@ -40,12 +44,15 @@ fn parse_assembly_code(code: String) -> Result<Assembly, ParseAssemblyError> {
       let move_params: Vec<&str> = params.split(',').collect();
       let register_to_mov_to = move_params.first().unwrap();
       let Some(value) = move_params.get(1).map(|x| x.trim().parse()) else {
-        return Err(ParseAssemblyError::InvalidParams("Move required 2 parameters".to_string()));
+        return Err(ParseAssemblyError::InvalidParams("Mov required 2 parameters".to_string()));
       };
 
       Ok(Assembly::Mov(register_to_mov_to.to_string(), RegisterOrValue::Value(value.unwrap())))
     },
-    _ => Err(ParseAssemblyError::Unknown)
+    _ => {
+      println!("Parse error for {:?}", command);
+      Err(ParseAssemblyError::Unknown)
+    }
   }
 }
 
@@ -61,6 +68,27 @@ mod tests {
       let result = simulate(code.to_string()).unwrap();
 
       assert_eq!(result["ax"], 3);
+    }
+
+    #[test]
+    fn simulate_multiline_mov() {
+      let code = "mov ax, 3
+      mov bx, 4";
+      let result = simulate(code.to_string()).unwrap();
+
+      assert_eq!(result["ax"], 3);
+      assert_eq!(result["bx"], 4);
+    }
+
+    #[test]
+    fn simulate_multiline_mov_with_blank_lines() {
+      let code = "mov ax, 3
+
+      mov bx, 4";
+      let result = simulate(code.to_string()).unwrap();
+
+      assert_eq!(result["ax"], 3);
+      assert_eq!(result["bx"], 4);
     }
 
     #[test]
