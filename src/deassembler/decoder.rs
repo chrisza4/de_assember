@@ -52,7 +52,7 @@ pub fn decode(instruction: &Vec<&u8>) -> Option<(String, u8)> {
     }
 }
 
-fn decode_immediate_to_register_or_memory(instruction: &Vec<u8>) -> Option<(String, u8)> {
+fn decode_immediate_to_register_or_memory(instruction: &[u8]) -> Option<(String, u8)> {
     const OPCODE: &str = "mov";
     let first_byte = *instruction.first().unwrap();
     let second_byte = instruction.get(1).unwrap();
@@ -86,7 +86,7 @@ fn decode_immediate_to_register_or_memory(instruction: &Vec<u8>) -> Option<(Stri
     ))
 }
 
-fn decode_immediate_to_register(instruction: &Vec<u8>) -> Option<(String, u8)> {
+fn decode_immediate_to_register(instruction: &[u8]) -> Option<(String, u8)> {
     let opcode = "mov";
     let first_byte = *instruction.first().unwrap();
     let register_bits = first_byte % 8;
@@ -109,7 +109,7 @@ fn decode_immediate_to_register(instruction: &Vec<u8>) -> Option<(String, u8)> {
 }
 
 // Return instruction and bytes consumed
-fn decode_rm_toorfrom_reg(instruction: &Vec<u8>) -> Option<(String, u8)> {
+fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
     let opcode = "mov";
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
@@ -136,7 +136,7 @@ fn decode_rm_toorfrom_reg(instruction: &Vec<u8>) -> Option<(String, u8)> {
     }
 }
 
-fn decode_mem_to_accumulator(instruction: &Vec<u8>) -> Option<(String, u8)> {
+fn decode_mem_to_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first().unwrap();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
@@ -156,7 +156,7 @@ fn decode_mem_to_accumulator(instruction: &Vec<u8>) -> Option<(String, u8)> {
     Some((format!("mov ax, [{}]", address), 3))
 }
 
-fn decode_accumulator_to_mem(instruction: &Vec<u8>) -> Option<(String, u8)> {
+fn decode_accumulator_to_mem(instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first().unwrap();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
