@@ -1,6 +1,8 @@
 use std::{env, fs, io, process::Command};
 
-use crate::decoder::decode;
+use decoder::decode;
+
+use super::decoder;
 
 pub fn deassembly() -> io::Result<()> {
   let args: Vec<String> = env::args().collect();

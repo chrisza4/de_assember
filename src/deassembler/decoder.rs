@@ -1,6 +1,8 @@
 use num_enum::TryFromPrimitive;
 
-use crate::binary::{combined_u8, BinaryOperator};
+use binary::{combined_u8, BinaryOperator};
+
+use super::binary;
 
 #[repr(u8)]
 #[derive(PartialEq, Debug)]
@@ -308,9 +310,8 @@ fn decode_register(register_bits: &u8, word_byte_operation: WordByteOperation) -
 
 #[cfg(test)]
 mod tests {
-    use crate::binary::split_u16_to_u8;
-
     use super::*;
+    use super::binary::*;
 
     #[test]
     fn simple_immeidate_to_register() {
