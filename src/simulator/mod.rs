@@ -1,5 +1,5 @@
 use crate::deassembler::decoder::decode;
-use std::collections::HashMap;
+use std::{cmp::min, collections::HashMap};
 
 #[allow(dead_code)]
 pub fn simulate_from_code(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError> {
@@ -19,17 +19,16 @@ pub fn simulate_from_code(code: String) -> Result<HashMap<String, u16>, ParseAss
 
 pub fn simulate_from_binary(binary: &Vec<u8>) -> Result<HashMap<String, u16>, ParseAssemblyError> {
     let mut result = HashMap::<String, u16>::new();
-    let mut iterator = binary.clone().into_iter();
-    while iterator.clone().next() != None {
-        let current_chunk: Vec<u8> = iterator.clone().take(6).collect();
+    let mut pointer = 0;
+    while binary.get(pointer) != None {
+        let end = min(binary.len(), pointer + 6);
+        let current_chunk = Vec::<u8>::from(&binary[pointer..end]);
         let (asm_instruction, bytes_consumed) = decode(&current_chunk).unwrap();
         match simulate_line(&mut result, &asm_instruction) {
             Ok(()) => (),
             Err(e) => return Err(e),
         }
-        (0..bytes_consumed).for_each(|_| {
-            iterator.next();
-        });
+        pointer = pointer + usize::from(bytes_consumed);
     }
     Ok(result)
 }

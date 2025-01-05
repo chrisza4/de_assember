@@ -200,7 +200,7 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     } else if first_byte.binary_starts_with(ACCUMULATOR_TO_MEMORY) {
         return Ok(OpCode::AccumulatorToMemory);
     }
-    println!("{:?}", first_byte);
+    
     Err("Invalid Opcode".to_string())
 }
 
