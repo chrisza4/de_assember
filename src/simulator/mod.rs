@@ -7,21 +7,32 @@ pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError
         if line.trim().is_empty() {
             continue;
         }
-        let assembly = parse_assembly_code(line);
-        match assembly {
-            Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
-                result.insert(register.to_string(), val);
-            }
-            Ok(Assembly::Mov(register, RegisterOrValue::Register(from_reg))) => {
-                let val = result.get(&from_reg).unwrap();
-
-                result.insert(register.to_string(), *val);
-            }
-            Ok(Assembly::Bit) => (),
+        match simulate_line(&mut result, line) {
+            Ok(()) => (),
             Err(e) => return Err(e),
         }
     }
     Ok(result)
+}
+
+pub fn simulate_line(
+    state: &mut HashMap<String, u16>,
+    line: &str,
+) -> Result<(), ParseAssemblyError> {
+    let assembly = parse_assembly_code(&line);
+    match assembly {
+        Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
+            state.insert(register.to_string(), val);
+        }
+        Ok(Assembly::Mov(register, RegisterOrValue::Register(from_reg))) => {
+            let val = state.get(&from_reg).unwrap();
+
+            state.insert(register.to_string(), *val);
+        }
+        Ok(Assembly::Bit) => (),
+        Err(e) => return Err(e),
+    };
+    Ok(())
 }
 
 enum RegisterOrValue {
@@ -87,10 +98,11 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
 
 #[cfg(test)]
 mod tests {
-    use crate::simulator::ParseAssemblyError;
+    use std::collections::HashMap;
+
+    use crate::simulator::{simulate_line, ParseAssemblyError};
 
     use super::simulate;
-
     #[test]
     fn simulate_simple_mov() {
         let code = "mov ax, 3";
@@ -141,9 +153,38 @@ mod tests {
     }
 
     #[test]
+    fn bit_do_nothing() {
+        let code = "bits 16";
+        let mut current_state = HashMap::<String, u16>::new();
+        let result = simulate_line(&mut current_state, code);
+        assert_eq!(result, Ok(()));
+        assert_eq!(current_state.len(), 0);
+    }
+
+    #[test]
+    fn simulate_line_simple_mov() {
+        let code = "mov ax, 3";
+        let mut current_state = HashMap::<String, u16>::new();
+        simulate_line(&mut current_state, code).unwrap();
+
+        assert_eq!(current_state["ax"], 3);
+    }
+
+    #[test]
+    fn simulate_line_mov_register() {
+        let code = "mov ax, bx";
+        let mut current_state = HashMap::<String, u16>::new();
+        current_state.insert("bx".into(), 3);
+        simulate_line(&mut current_state, code).unwrap();
+        assert_eq!(current_state["ax"], 3);
+    }
+
+    #[test]
     fn mov_err_without_params() {
         let code = "mov";
-        let result = simulate(code.to_string());
+        let mut current_state = HashMap::<String, u16>::new();
+        // let result = simue(code.to_string());
+        let result = simulate_line(&mut current_state, code);
 
         assert_eq!(
             result,
@@ -156,7 +197,8 @@ mod tests {
     #[test]
     fn mov_err_without_value() {
         let code = "mov ax";
-        let result = simulate(code.to_string());
+        let mut current_state = HashMap::<String, u16>::new();
+        let result = simulate_line(&mut current_state, code);
 
         assert_eq!(
             result,
@@ -167,9 +209,12 @@ mod tests {
     }
 
     #[test]
-    fn bit_do_nothing() {
-        let code = "bits 16";
-        let result = simulate(code.to_string()).unwrap();
-        assert_eq!(result.len(), 0);
+    fn simulate_line_mov_with_existing_state() {
+        let code = "mov bx, 4";
+        let mut current_state = HashMap::<String, u16>::new();
+        current_state.insert("bx".into(), 3);
+        simulate_line(&mut current_state, code).unwrap();
+
+        assert_eq!(current_state["bx"], 4);
     }
 }
