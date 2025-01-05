@@ -40,8 +40,17 @@ pub enum ParseAssemblyError {
     Unknown,
 }
 
+fn strip_comment(code: &str) -> &str {
+    if code.contains(';') {
+        code.split_once(';').unwrap().0
+    } else {
+        code
+    }
+}
+
 fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
-    let command_and_params = code.trim().split_once(' ');
+    let code_without_comment = strip_comment(code);
+    let command_and_params = code_without_comment.trim().split_once(' ');
     let command = command_and_params.map(|x| x.0).unwrap_or(code);
     match command {
         "mov" => {
@@ -93,6 +102,16 @@ mod tests {
     #[test]
     fn simulate_multiline_mov() {
         let code = "mov ax, 3
+      mov bx, 4";
+        let result = simulate(code.to_string()).unwrap();
+
+        assert_eq!(result["ax"], 3);
+        assert_eq!(result["bx"], 4);
+    }
+
+    #[test]
+    fn simulate_multiline_mov_with_comment() {
+        let code = "mov ax, 3 ;comment
       mov bx, 4";
         let result = simulate(code.to_string()).unwrap();
 
