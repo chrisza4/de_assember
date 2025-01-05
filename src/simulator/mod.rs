@@ -1,6 +1,7 @@
+use crate::deassembler::decoder::decode;
 use std::collections::HashMap;
 
-pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError> {
+pub fn simulate_from_code(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError> {
     let mut result = HashMap::<String, u16>::new();
     let lines = code.split('\n');
     for line in lines {
@@ -11,6 +12,24 @@ pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError
             Ok(()) => (),
             Err(e) => return Err(e),
         }
+    }
+    Ok(result)
+}
+
+pub fn simulate_from_binary(binary: &Vec<u8>) -> Result<HashMap<String, u16>, ParseAssemblyError> {
+    let mut result = HashMap::<String, u16>::new();
+    let mut iterator = binary.clone().into_iter();
+    while iterator.clone().peekable().peek().is_some() {
+        let current_chunk: Vec<u8> = iterator.clone().take(6).collect();
+        let (asm_instruction, bytes_consumed) = decode(&current_chunk).unwrap();
+        println!("Code: {:?}", asm_instruction);
+        match simulate_line(&mut result, &asm_instruction) {
+            Ok(()) => (),
+            Err(e) => return Err(e),
+        }
+        (0..bytes_consumed).for_each(|_| {
+            iterator.next();
+        });
     }
     Ok(result)
 }
@@ -102,11 +121,11 @@ mod tests {
 
     use crate::simulator::{simulate_line, ParseAssemblyError};
 
-    use super::simulate;
+    use super::{simulate_from_binary, simulate_from_code};
     #[test]
     fn simulate_simple_mov() {
         let code = "mov ax, 3";
-        let result = simulate(code.to_string()).unwrap();
+        let result = simulate_from_code(code.to_string()).unwrap();
 
         assert_eq!(result["ax"], 3);
     }
@@ -115,7 +134,7 @@ mod tests {
     fn simulate_multiline_mov() {
         let code = "mov ax, 3
       mov bx, 4";
-        let result = simulate(code.to_string()).unwrap();
+        let result = simulate_from_code(code.to_string()).unwrap();
 
         assert_eq!(result["ax"], 3);
         assert_eq!(result["bx"], 4);
@@ -125,7 +144,7 @@ mod tests {
     fn simulate_multiline_mov_with_comment() {
         let code = "mov ax, 3 ;comment
       mov bx, 4";
-        let result = simulate(code.to_string()).unwrap();
+        let result = simulate_from_code(code.to_string()).unwrap();
 
         assert_eq!(result["ax"], 3);
         assert_eq!(result["bx"], 4);
@@ -135,7 +154,7 @@ mod tests {
     fn simulate_mov_register() {
         let code = "mov ax, 3
       mov bx, ax";
-        let result = simulate(code.to_string()).unwrap();
+        let result = simulate_from_code(code.to_string()).unwrap();
 
         assert_eq!(result["ax"], 3);
         assert_eq!(result["bx"], 3);
@@ -146,7 +165,7 @@ mod tests {
         let code = "mov ax, 3
 
       mov bx, 4";
-        let result = simulate(code.to_string()).unwrap();
+        let result = simulate_from_code(code.to_string()).unwrap();
 
         assert_eq!(result["ax"], 3);
         assert_eq!(result["bx"], 4);
@@ -216,5 +235,15 @@ mod tests {
         simulate_line(&mut current_state, code).unwrap();
 
         assert_eq!(current_state["bx"], 4);
+    }
+
+    #[test]
+    fn test_simulate_from_binary() {
+        let binary = [185, 3, 0, 184, 4, 0, 137, 195]; // From asm/test_simulation
+        let result = simulate_from_binary(&binary.into()).unwrap();
+
+        assert_eq!(result["ax"], 4);
+        assert_eq!(result["bx"], 4);
+        assert_eq!(result["cx"], 3);
     }
 }

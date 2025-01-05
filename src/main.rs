@@ -15,11 +15,12 @@ fn run_simulate() {
     }
     let file_path = args.get(1).unwrap();
 
-    let contents = fs::read_to_string(file_path);
+    let contents = fs::read(file_path);
 
+    println!("{:?}", contents);
     match contents {
         Ok(contents) => {
-            let Ok(result) = simulator::simulate(contents) else {
+            let Ok(result) = simulator::simulate_from_binary(&contents) else {
                 panic!("Cannot simulate");
             };
             const REGISTERS: [&str; 8] = ["ax", "bx", "cx", "dx", "sp", "bp", "si", "di"];
