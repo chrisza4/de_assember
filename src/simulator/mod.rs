@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::ParseIntError};
+use std::collections::HashMap;
 
 pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError> {
     let mut result = HashMap::<String, u16>::new();
@@ -17,6 +17,7 @@ pub fn simulate(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError
 
                 result.insert(register.to_string(), *val);
             }
+            Ok(Assembly::Bit) => (),
             Err(e) => return Err(e),
         }
     }
@@ -30,6 +31,7 @@ enum RegisterOrValue {
 
 enum Assembly {
     Mov(String, RegisterOrValue),
+    Bit,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -66,6 +68,7 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
                 )),
             }
         }
+        "bit" => Ok(Assembly::Bit),
         _ => {
             println!("Parse error for {:?}", command);
             Err(ParseAssemblyError::Unknown)
@@ -142,5 +145,12 @@ mod tests {
                 "Mov required 2 parameters".to_string()
             ))
         );
+    }
+
+    #[test]
+    fn bit_do_nothing() {
+        let code = "bit 16";
+        let result = simulate(code.to_string()).unwrap();
+        assert_eq!(result.len(), 0);
     }
 }
