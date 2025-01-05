@@ -77,7 +77,7 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
                 )),
             }
         }
-        "bit" => Ok(Assembly::Bit),
+        "bits" => Ok(Assembly::Bit),
         _ => {
             println!("Parse error for {:?}", command);
             Err(ParseAssemblyError::Unknown)
@@ -168,7 +168,7 @@ mod tests {
 
     #[test]
     fn bit_do_nothing() {
-        let code = "bit 16";
+        let code = "bits 16";
         let result = simulate(code.to_string()).unwrap();
         assert_eq!(result.len(), 0);
     }
