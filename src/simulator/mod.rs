@@ -20,7 +20,7 @@ pub fn simulate_from_code(code: String) -> Result<HashMap<String, u16>, ParseAss
 pub fn simulate_from_binary(binary: &Vec<u8>) -> Result<HashMap<String, u16>, ParseAssemblyError> {
     let mut result = HashMap::<String, u16>::new();
     let mut pointer = 0;
-    while binary.get(pointer) != None {
+    while binary.get(pointer).is_some() {
         let end = min(binary.len(), pointer + 6);
         let current_chunk = Vec::<u8>::from(&binary[pointer..end]);
         let (asm_instruction, bytes_consumed) = decode(&current_chunk).unwrap();
@@ -28,7 +28,7 @@ pub fn simulate_from_binary(binary: &Vec<u8>) -> Result<HashMap<String, u16>, Pa
             Ok(()) => (),
             Err(e) => return Err(e),
         }
-        pointer = pointer + usize::from(bytes_consumed);
+        pointer += usize::from(bytes_consumed);
     }
     Ok(result)
 }

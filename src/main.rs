@@ -17,13 +17,13 @@ fn run_simulate() {
 
     let contents = fs::read(file_path);
 
-    println!("{:?}", contents);
+    println!("Binary: {:?}", contents);
     match contents {
         Ok(contents) => {
             let Ok(result) = simulator::simulate_from_binary(&contents) else {
                 panic!("Cannot simulate");
             };
-            const REGISTERS: [&str; 8] = ["ax", "bx", "cx", "dx", "sp", "bp", "si", "di"];
+            const REGISTERS: [&str; 11] = ["ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "ss", "ds"];
             for register in REGISTERS {
                 let value = result.get(register).unwrap_or(&0);
                 println!("{:?}: {:#04x}", register, value);
