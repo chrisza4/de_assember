@@ -4,7 +4,6 @@ use std::{env, fs, io};
 mod deassembler;
 mod simulator;
 fn main() {
-    //  deassembler::deassembler::deassembly()
     run_simulate();
 }
 
@@ -17,9 +16,12 @@ fn run_simulate() {
 
     let contents = fs::read(file_path);
 
-    println!("Binary: {:?}", contents);
+    
     match contents {
         Ok(contents) => {
+            for bits in &contents {
+                println!("{bits:#010b}");
+            }
             let Ok(result) = simulator::simulate_from_binary(&contents) else {
                 panic!("Cannot simulate");
             };

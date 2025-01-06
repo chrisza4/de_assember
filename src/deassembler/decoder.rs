@@ -27,6 +27,7 @@ enum OpCode {
     AccumulatorToMemory,
     RmToSegmentRegister,
     SegmentRegisterToRm,
+    SubImmediateFromRm,
 }
 
 #[repr(u8)]
@@ -52,27 +53,65 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
         Ok(OpCode::AccumulatorToMemory) => decode_accumulator_to_mem(&instruction_deref),
         Ok(OpCode::RmToSegmentRegister) => decode_rm_to_segment(&instruction_deref),
         Ok(OpCode::SegmentRegisterToRm) => decode_segment_to_rm(&instruction_deref),
+        Ok(OpCode::SubImmediateFromRm) => decode_sub_immediate_from_rm(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
 }
+
+fn decode_sub_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
+    const OPCODE: &str = "sub";
+    let first_byte = *instruction.first().unwrap();
+    let second_byte = instruction.get(1).unwrap();
+    let third_byte = instruction.get(2);
+    let fourth_byte = instruction.get(3);
+    let word_byte_operation = decode_wordbyte_operation(&first_byte);
+    let s_bit = (first_byte & 0b00000010) >> 1;
+    let (register, bit_consumed_on_rm) =
+        decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
+    
+    let data1 = instruction.get(bit_consumed_on_rm as usize);
+    let data2 = instruction.get((bit_consumed_on_rm as usize) + 1);
+
+    let (value, bit_consumed_on_data) = if word_byte_operation == WordByteOperation::Word && s_bit == 0 {
+        (combined_u8(*data2.unwrap(), *data1.unwrap()), 2)
+    } else {
+        (*data1.unwrap() as u16, 1)
+    };
+
+    Some((
+        format!("{} {}, {}", OPCODE, register.to_lowercase(), value),
+        bit_consumed_on_data + bit_consumed_on_rm,
+    ))
+}
+
 
 fn decode_segment_to_rm(instruction: &[u8]) -> Option<(String, u8)> {
     let second_byte = instruction.get(1).unwrap();
     let third_byte = instruction.get(2);
     let fourth_byte = instruction.get(3);
     const SR_TABLES: [&str; 4] = ["es", "cs", "ss", "ds"];
-    let (rm, bytes_consumed) = decode_rm_field(WordByteOperation::Word, second_byte, third_byte, fourth_byte);
+    let (rm, bytes_consumed) = decode_rm_field(
+        WordByteOperation::Word,
+        second_byte,
+        third_byte,
+        fourth_byte,
+    );
     let sr_bits = (second_byte & 0b0011000) >> 3;
     let sr = SR_TABLES[sr_bits as usize];
     Some((format!("mov {}, {}", rm.to_lowercase(), sr), bytes_consumed))
 }
 
-fn decode_rm_to_segment(instruction: &[u8]) ->Option<(String, u8)> {
+fn decode_rm_to_segment(instruction: &[u8]) -> Option<(String, u8)> {
     let second_byte = instruction.get(1).unwrap();
     let third_byte = instruction.get(2);
     let fourth_byte = instruction.get(3);
     const SR_TABLES: [&str; 4] = ["es", "cs", "ss", "ds"];
-    let (rm, bytes_consumed) = decode_rm_field(WordByteOperation::Word, second_byte, third_byte, fourth_byte);
+    let (rm, bytes_consumed) = decode_rm_field(
+        WordByteOperation::Word,
+        second_byte,
+        third_byte,
+        fourth_byte,
+    );
     let sr_bits = (second_byte & 0b0011000) >> 3;
     let sr = SR_TABLES[sr_bits as usize];
     Some((format!("mov {}, {}", sr, rm.to_lowercase()), bytes_consumed))
@@ -217,23 +256,27 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     const ACCUMULATOR_TO_MEMORY: u8 = 0b1010001;
     const RM_TO_SEGMENT: u8 = 0b10001110;
     const SEGMENT_TO_RM: u8 = 0b10001100;
-    if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) {
-        return Ok(OpCode::RmToOrFromRegister);
-    } else if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER) {
-        return Ok(OpCode::ImmediateToRegister);
-    } else if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER_OR_MEMORY) {
-        return Ok(OpCode::ImmediateToRegisterOrMemory);
-    } else if first_byte.binary_starts_with(MEMORY_TO_ACCUMULATOR) {
-        return Ok(OpCode::MemoryToAccumulator);
-    } else if first_byte.binary_starts_with(ACCUMULATOR_TO_MEMORY) {
-        return Ok(OpCode::AccumulatorToMemory);
-    } else if first_byte.binary_starts_with(RM_TO_SEGMENT) {
-        return Ok(OpCode::RmToSegmentRegister);
-    } else if first_byte.binary_starts_with(SEGMENT_TO_RM) {
-        return Ok(OpCode::SegmentRegisterToRm);
-    } 
-    
-    Err(format!("Invalid Opcode {:?}", first_byte))
+    const SUB_IMMEDIATE_FROM_REGISTER: u8 = 0b100000;
+
+    match first_byte {
+        _ if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) => Ok(OpCode::RmToOrFromRegister),
+        _ if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER) => {
+            Ok(OpCode::ImmediateToRegister)
+        }
+        _ if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER_OR_MEMORY) => {
+            Ok(OpCode::ImmediateToRegisterOrMemory)
+        }
+        _ if first_byte.binary_starts_with(MEMORY_TO_ACCUMULATOR) => {
+            Ok(OpCode::MemoryToAccumulator)
+        }
+        _ if first_byte.binary_starts_with(ACCUMULATOR_TO_MEMORY) => {
+            Ok(OpCode::AccumulatorToMemory)
+        }
+        _ if first_byte.binary_starts_with(RM_TO_SEGMENT) => Ok(OpCode::RmToSegmentRegister),
+        _ if first_byte.binary_starts_with(SEGMENT_TO_RM) => Ok(OpCode::SegmentRegisterToRm),
+        _ if first_byte.binary_starts_with(SUB_IMMEDIATE_FROM_REGISTER) => Ok(OpCode::SubImmediateFromRm),
+        _ => Err(format!("Invalid Opcode {:?}", first_byte)), // Handle unmatched cases if necessary
+    }
 }
 
 fn decode_register_direction(first_byte: &u8) -> RegisterDirection {
@@ -370,6 +413,21 @@ mod tests {
 
         assert_eq!("mov ss, ax", decoded_instruction.0);
         assert_eq!(2, decoded_instruction.1);
+    }
+
+    #[test]
+    fn test_decode_sub_immediate_from_rm() {
+        let encoded_instruction = [0b10000011, 0b11101000, 0b00110111];
+        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+
+        assert_eq!("sub ax, 55", decoded_instruction.0);
+        assert_eq!(3, decoded_instruction.1);
+
+        let encoded_instruction = [0b10000001, 0b11101011, 0b00000011, 0b11011001];
+        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+
+        assert_eq!("sub bx, 55555", decoded_instruction.0);
+        assert_eq!(4, decoded_instruction.1);
     }
 
     #[test]
