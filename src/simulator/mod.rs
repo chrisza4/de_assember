@@ -1,3 +1,5 @@
+use register_set::RegisterSet;
+
 use crate::deassembler::decoder::decode;
 use std::{cmp::min, collections::HashMap};
 
@@ -39,16 +41,16 @@ pub fn simulate_line(
     state: &mut HashMap<String, u16>,
     line: &str,
 ) -> Result<(), ParseAssemblyError> {
-    let assembly = parse_assembly_code(&line);
+    let assembly = parse_assembly_code(line);
     println!("Asm: {}", line);
     match assembly {
         Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
-            state.insert(register.to_string(), val);
+            state.insert_by_reg_name(&register, val);
         }
         Ok(Assembly::Mov(register, RegisterOrValue::Register(from_reg))) => {
-            let val = state.get(&from_reg).unwrap();
+            let val = state.get_by_reg_name(&from_reg).unwrap();
 
-            state.insert(register.to_string(), *val);
+            state.insert_by_reg_name(&register, val);
         }
         Ok(Assembly::Bit) => (),
         Err(e) => return Err(e),

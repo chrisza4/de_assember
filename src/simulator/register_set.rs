@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-trait RegisterSet {
+pub trait RegisterSet {
     fn get_by_reg_name(&self, register: &str) -> Option<u16>;
     fn insert_by_reg_name(&mut self, register: &str, value: u16) -> Option<u16>;
 }
@@ -37,6 +37,7 @@ impl RegisterSet for HashMap<String, u16> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use std::collections::HashMap;
     use crate::simulator::register_set::RegisterSet;
