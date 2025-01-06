@@ -201,7 +201,7 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
         return Ok(OpCode::AccumulatorToMemory);
     }
     
-    Err("Invalid Opcode".to_string())
+    Err(format!("Invalid Opcode {:?}", first_byte))
 }
 
 fn decode_register_direction(first_byte: &u8) -> RegisterDirection {
