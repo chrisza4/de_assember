@@ -25,6 +25,7 @@ enum OpCode {
     ImmediateToRegisterOrMemory,
     MemoryToAccumulator,
     AccumulatorToMemory,
+    RmToSegmentRegister,
 }
 
 #[repr(u8)]
@@ -48,8 +49,20 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
         }
         Ok(OpCode::MemoryToAccumulator) => decode_mem_to_accumulator(&instruction_deref),
         Ok(OpCode::AccumulatorToMemory) => decode_accumulator_to_mem(&instruction_deref),
+        Ok(OpCode::RmToSegmentRegister) => decode_rm_to_segment(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
+}
+
+fn decode_rm_to_segment(instruction: &[u8]) ->Option<(String, u8)> {
+    let second_byte = instruction.get(1).unwrap();
+    let third_byte = instruction.get(2);
+    let fourth_byte = instruction.get(3);
+    const SR_TABLES: [&str; 4] = ["es", "cs", "ss", "ds"];
+    let (rm, bytes_consumed) = decode_rm_field(WordByteOperation::Word, second_byte, third_byte, fourth_byte);
+    let sr_bits = (second_byte & 0b0011000) >> 3;
+    let sr = SR_TABLES[sr_bits as usize];
+    Some((format!("mov {}, {}", sr, rm.to_lowercase()), bytes_consumed))
 }
 
 fn decode_immediate_to_register_or_memory(instruction: &[u8]) -> Option<(String, u8)> {
@@ -189,6 +202,7 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     const IMMEDIATE_TO_REGISTER_OR_MEMORY: u8 = 0b1100011;
     const MEMORY_TO_ACCUMULATOR: u8 = 0b1010000;
     const ACCUMULATOR_TO_MEMORY: u8 = 0b1010001;
+    const RM_TO_SEGMENT: u8 = 0b10001110;
     if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) {
         return Ok(OpCode::RmToOrFromRegister);
     } else if first_byte.binary_starts_with(IMMEDIATE_TO_REGISTER) {
@@ -199,6 +213,8 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
         return Ok(OpCode::MemoryToAccumulator);
     } else if first_byte.binary_starts_with(ACCUMULATOR_TO_MEMORY) {
         return Ok(OpCode::AccumulatorToMemory);
+    } else if first_byte.binary_starts_with(RM_TO_SEGMENT) {
+        return Ok(OpCode::RmToSegmentRegister);
     }
     
     Err(format!("Invalid Opcode {:?}", first_byte))
@@ -328,6 +344,15 @@ mod tests {
         let decoded_instruction = decode_rm_toorfrom_reg(&encoded_instruction).unwrap();
 
         assert_eq!("mov cx, bx", decoded_instruction.0);
+        assert_eq!(2, decoded_instruction.1);
+    }
+
+    #[test]
+    fn decode_register_memory_to_segment_register() {
+        let encoded_instruction = [142u8, 208];
+        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+
+        assert_eq!("mov ss, ax", decoded_instruction.0);
         assert_eq!(2, decoded_instruction.1);
     }
 

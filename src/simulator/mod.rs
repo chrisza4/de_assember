@@ -38,6 +38,7 @@ pub fn simulate_line(
     line: &str,
 ) -> Result<(), ParseAssemblyError> {
     let assembly = parse_assembly_code(&line);
+    println!("Asm: {}", line);
     match assembly {
         Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
             state.insert(register.to_string(), val);
