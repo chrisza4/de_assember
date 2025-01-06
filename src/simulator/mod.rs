@@ -1,6 +1,8 @@
 use crate::deassembler::decoder::decode;
 use std::{cmp::min, collections::HashMap};
 
+mod register_set;
+
 #[allow(dead_code)]
 pub fn simulate_from_code(code: String) -> Result<HashMap<String, u16>, ParseAssemblyError> {
     let mut result = HashMap::<String, u16>::new();
