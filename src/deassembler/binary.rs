@@ -1,11 +1,16 @@
 pub trait BinaryOperator {
     fn binary_starts_with(&self, pattern: u8) -> bool;
+    fn binary_at_equals(&self, position: u8, value: u8) -> bool;
 }
 
 impl BinaryOperator for u8 {
     fn binary_starts_with(&self, pattern: u8) -> bool {
         let comparator = *self >> pattern.leading_zeros();
         comparator == pattern
+    }
+
+    fn binary_at_equals(&self, position: u8, value: u8) -> bool {
+        (self / 2_u8.pow(position as u32) % 2) == value
     }
 }
 

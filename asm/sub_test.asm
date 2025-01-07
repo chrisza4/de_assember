@@ -1,3 +1,3 @@
 bits 16
 
-add ax, bx 
+add bx, 5555
