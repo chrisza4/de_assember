@@ -1,3 +1,3 @@
 bits 16
 
-sub bx, 55555
+sub ax, 56782
