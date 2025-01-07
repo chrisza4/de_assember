@@ -1,3 +1,3 @@
 bits 16
 
-sub ax, 56782
+sub al, [bx + si + 65022]

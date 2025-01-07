@@ -29,6 +29,7 @@ enum OpCode {
     SegmentRegisterToRm,
     SubImmediateFromRm,
     SubImmediateFromAccumulator,
+    SubRmAndRegisterToEither,
 }
 
 #[repr(u8)]
@@ -56,7 +57,35 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
         Ok(OpCode::SegmentRegisterToRm) => decode_segment_to_rm(&instruction_deref),
         Ok(OpCode::SubImmediateFromRm) => decode_sub_immediate_from_rm(&instruction_deref),
         Ok(OpCode::SubImmediateFromAccumulator) => decode_sub_immediate_from_accumulator(&instruction_deref),
+        Ok(OpCode::SubRmAndRegisterToEither) => decode_sub_rm_and_register(&instruction_deref),
         Err(e) => panic!("{}", e),
+    }
+}
+
+fn decode_sub_rm_and_register(instruction: &[u8]) -> Option<(String, u8)> {
+    let opcode = "sub";
+    let first_byte = instruction.first();
+    let second_byte = instruction.get(1);
+    let third_byte = instruction.get(2);
+    let fourth_byte = instruction.get(3);
+    match (first_byte, second_byte) {
+        (Some(first_byte), Some(second_byte)) => {
+            let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
+            let word_byte_operation = decode_wordbyte_operation(first_byte);
+            let rm_result =
+                decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
+            let rm = rm_result.0.to_lowercase();
+            let bytes_consumed = rm_result.1;
+            let direction = decode_register_direction(first_byte);
+            if direction == RegisterDirection::SourceInRegField {
+                let result = format!("{} {}, {}", opcode, rm, reg);
+                Some((result, bytes_consumed))
+            } else {
+                let result = format!("{} {}, {}", opcode, reg, rm);
+                Some((result, bytes_consumed))
+            }
+        }
+        _ => None,
     }
 }
 
@@ -268,6 +297,7 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
     const SEGMENT_TO_RM: u8 = 0b10001100;
     const SUB_IMMEDIATE_FROM_REGISTER: u8 = 0b100000;
     const SUB_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00101100;
+    const SUB_RM_AND_REGISTER_TO_EITHER: u8 = 0b00101000;
 
     match first_byte {
         _ if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) => Ok(OpCode::RmToOrFromRegister),
@@ -287,6 +317,7 @@ fn decode_opcode(first_byte: &u8) -> Result<OpCode, String> {
         _ if first_byte.binary_starts_with(SEGMENT_TO_RM) => Ok(OpCode::SegmentRegisterToRm),
         _ if first_byte.binary_starts_with(SUB_IMMEDIATE_FROM_REGISTER) => Ok(OpCode::SubImmediateFromRm),
         _ if (first_byte ^ SUB_IMMEDIATE_FROM_ACCUMULATOR) | 1 == 1 => Ok(OpCode::SubImmediateFromAccumulator),
+        _ if (first_byte ^ SUB_RM_AND_REGISTER_TO_EITHER) | 0b11 == 0b11 => Ok(OpCode::SubRmAndRegisterToEither),
         _ => Err(format!("Invalid Opcode {:?}", first_byte)), // Handle unmatched cases if necessary
     }
 }
@@ -432,6 +463,20 @@ mod tests {
         let test_cases = [
             (vec![0b10000011u8, 0b11101000, 0b00110111], "sub ax, 55", 3),
             (vec![0b10000001, 0b11101011, 0b00000011, 0b11011001], "sub bx, 55555", 4)
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);   
+        }
+    }
+
+    #[test]
+    fn test_decode_sub_rm_with_register() {
+        let test_cases = [
+            (vec![0b00101001, 0b11001011], "sub bx, cx", 2),
+            (vec![0b00101010, 0b10000000, 0b11111110, 0b11111101], "sub al, [bx + si + 65022]", 4)
         ];
 
         for (encoded_instruction, expected, bytes_consumed) in test_cases {
