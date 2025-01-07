@@ -32,6 +32,7 @@ enum OpCode {
     SubRmAndRegisterToEither,
     AddRmAndRegisterToEither,
     AddImmediateFromRm,
+    AddImmediateFromAccumulator
 }
 
 #[repr(u8)]
@@ -65,8 +66,14 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
         Ok(OpCode::SubRmAndRegisterToEither) => decode_sub_rm_and_register(&instruction_deref),
         Ok(OpCode::AddRmAndRegisterToEither) => decode_add_rm_and_register(&instruction_deref),
         Ok(OpCode::AddImmediateFromRm) => decode_add_immediate_from_rm(&instruction_deref),
+        Ok(OpCode::AddImmediateFromAccumulator) => decode_add_immediate_from_accumulator(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
+}
+
+fn decode_add_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
+    let address = decode_mem_accumulator_address(instruction);
+    Some((format!("add ax, {}", address), 3)) 
 }
 
 fn decode_add_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
@@ -166,10 +173,10 @@ struct ImmediateToRegister {
     register: String,
     identifier: String,
     value: u16,
-    bit_consumed: u8
+    bit_consumed: u8,
 }
 
-fn decode_immediate_from_rm(instruction: &[u8], signed_bit: bool) -> Option<ImmediateToRegister>  {    
+fn decode_immediate_from_rm(instruction: &[u8], signed_bit: bool) -> Option<ImmediateToRegister> {
     let first_byte = *instruction.first().unwrap();
     let second_byte = instruction.get(1).unwrap();
     let third_byte = instruction.get(2);
@@ -182,11 +189,11 @@ fn decode_immediate_from_rm(instruction: &[u8], signed_bit: bool) -> Option<Imme
     let data2 = instruction.get((bit_consumed_on_rm as usize) + 1);
 
     let (value, bit_consumed_on_data) =
-    if word_byte_operation == WordByteOperation::Word && !signed_bit {
-        (combined_u8(*data2.unwrap(), *data1.unwrap()), 2)
-    } else {
-        (*data1.unwrap() as u16, 1)
-    };
+        if word_byte_operation == WordByteOperation::Word && !signed_bit {
+            (combined_u8(*data2.unwrap(), *data1.unwrap()), 2)
+        } else {
+            (*data1.unwrap() as u16, 1)
+        };
 
     let identifier = if word_byte_operation == WordByteOperation::Word {
         "word"
@@ -198,7 +205,7 @@ fn decode_immediate_from_rm(instruction: &[u8], signed_bit: bool) -> Option<Imme
         register,
         identifier: identifier.to_string(),
         value,
-        bit_consumed: bit_consumed_on_rm + bit_consumed_on_data
+        bit_consumed: bit_consumed_on_rm + bit_consumed_on_data,
     })
 }
 
@@ -299,6 +306,7 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
     const SUB_OR_ADD_IMMEDIATE_FROM_REGISTER: u8 = 0b100000;
     const SUB_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00101100;
     const SUB_RM_AND_REGISTER_TO_EITHER: u8 = 0b00101000;
+    const ADD_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00000100;
     const ADD_RM_AND_REGISTER_TO_EITHER: u8 = 0b00000000;
 
     match first_byte {
@@ -337,6 +345,9 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
         }
         _ if (first_byte ^ ADD_RM_AND_REGISTER_TO_EITHER) | 0b11 == 0b11 => {
             Ok(OpCode::AddRmAndRegisterToEither)
+        }
+        _ if (first_byte ^ ADD_IMMEDIATE_FROM_ACCUMULATOR) | 1 == 1 => {
+            Ok(OpCode::AddImmediateFromAccumulator)
         }
 
         _ => Err(format!("Invalid Opcode {:?}", first_byte)), // Handle unmatched cases if necessary
@@ -570,6 +581,20 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_add_immediate_from_accumulator() {
+        let test_cases = [
+            (vec![0b10000011, 0b11000000, 0b00100001], "add ax, 33", 3),
+            (vec![0b00000101, 0b11001110, 0b11011101], "add ax, 56782", 3),
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);
+        }
+    }
+
+    #[test]
     fn decode_segment_register_to_rm() {
         let encoded_instruction = [140u8, 212];
         let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
@@ -698,9 +723,18 @@ mod tests {
 
     #[test]
     fn test_decode_opcode() {
-        assert_eq!(Ok(OpCode::RmToOrFromRegister), decode_opcode(&0b10001001, None));
-        assert_eq!(Ok(OpCode::RmToOrFromRegister), decode_opcode(&0b10001011, None));
-        assert_eq!(Ok(OpCode::RmToOrFromRegister), decode_opcode(&0b10001010, None));
+        assert_eq!(
+            Ok(OpCode::RmToOrFromRegister),
+            decode_opcode(&0b10001001, None)
+        );
+        assert_eq!(
+            Ok(OpCode::RmToOrFromRegister),
+            decode_opcode(&0b10001011, None)
+        );
+        assert_eq!(
+            Ok(OpCode::RmToOrFromRegister),
+            decode_opcode(&0b10001010, None)
+        );
     }
 
     #[test]
