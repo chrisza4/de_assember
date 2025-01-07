@@ -46,11 +46,11 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
     let instruction_deref = instruction.iter().map(|x| *x).collect::<Vec<u8>>();
     match opcode {
         Ok(OpCode::RmToOrFromRegister) => decode_rm_toorfrom_reg(&instruction_deref),
-        Ok(OpCode::ImmediateToRegister) => decode_immediate_to_register(&instruction_deref),
+        Ok(OpCode::ImmediateToRegister) => decode_mov_immediate_to_register(&instruction_deref),
         Ok(OpCode::ImmediateToRegisterOrMemory) => {
             decode_immediate_to_register_or_memory(&instruction_deref)
         }
-        Ok(OpCode::MemoryToAccumulator) => decode_mem_to_accumulator(&instruction_deref),
+        Ok(OpCode::MemoryToAccumulator) => decode_mov_mem_to_accumulator(&instruction_deref),
         Ok(OpCode::AccumulatorToMemory) => decode_accumulator_to_mem(&instruction_deref),
         Ok(OpCode::RmToSegmentRegister) => decode_rm_to_segment(&instruction_deref),
         Ok(OpCode::SegmentRegisterToRm) => decode_segment_to_rm(&instruction_deref),
@@ -61,22 +61,7 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
 }
 
 fn decode_sub_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
-    let first_byte = instruction.first().unwrap();
-    let second_byte = instruction.get(1);
-    let third_byte = instruction.get(2);
-
-    let word_byte_operation = if (first_byte & 1) == 0 {
-        WordByteOperation::Byte
-    } else {
-        WordByteOperation::Word
-    };
-
-    let address = if word_byte_operation == WordByteOperation::Word {
-        combined_u8(*third_byte.unwrap(), *second_byte.unwrap())
-    } else {
-        *second_byte.unwrap() as u16
-    };
-
+    let address = decode_mem_accumulator_address(instruction);
     Some((format!("sub ax, {}", address), 3))
 }
 
@@ -173,7 +158,7 @@ fn decode_immediate_to_register_or_memory(instruction: &[u8]) -> Option<(String,
     ))
 }
 
-fn decode_immediate_to_register(instruction: &[u8]) -> Option<(String, u8)> {
+fn decode_mov_immediate_to_register(instruction: &[u8]) -> Option<(String, u8)> {
     let opcode = "mov";
     let first_byte = *instruction.first().unwrap();
     let register_bits = first_byte % 8;
@@ -223,7 +208,7 @@ fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
     }
 }
 
-fn decode_mem_to_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
+fn decode_mem_accumulator_address(instruction: &[u8]) -> u16  {
     let first_byte = instruction.first().unwrap();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
@@ -234,12 +219,15 @@ fn decode_mem_to_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
         WordByteOperation::Word
     };
 
-    let address = if word_byte_operation == WordByteOperation::Word {
+    if word_byte_operation == WordByteOperation::Word {
         combined_u8(*third_byte.unwrap(), *second_byte.unwrap())
     } else {
         *second_byte.unwrap() as u16
-    };
+    }
+}
 
+fn decode_mov_mem_to_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
+    let address = decode_mem_accumulator_address(instruction);
     Some((format!("mov ax, [{}]", address), 3))
 }
 
