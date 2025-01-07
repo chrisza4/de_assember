@@ -62,8 +62,7 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
     }
 }
 
-fn decode_sub_rm_and_register(instruction: &[u8]) -> Option<(String, u8)> {
-    let opcode = "sub";
+fn decode_rm_register(opcode: &str, instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
     let third_byte = instruction.get(2);
@@ -87,6 +86,10 @@ fn decode_sub_rm_and_register(instruction: &[u8]) -> Option<(String, u8)> {
         }
         _ => None,
     }
+}
+
+fn decode_sub_rm_and_register(instruction: &[u8]) -> Option<(String, u8)> {
+    decode_rm_register("sub", instruction)
 }
 
 fn decode_sub_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
@@ -211,30 +214,7 @@ fn decode_mov_immediate_to_register(instruction: &[u8]) -> Option<(String, u8)> 
 
 // Return instruction and bytes consumed
 fn decode_rm_toorfrom_reg(instruction: &[u8]) -> Option<(String, u8)> {
-    let opcode = "mov";
-    let first_byte = instruction.first();
-    let second_byte = instruction.get(1);
-    let third_byte = instruction.get(2);
-    let fourth_byte = instruction.get(3);
-    match (first_byte, second_byte) {
-        (Some(first_byte), Some(second_byte)) => {
-            let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
-            let word_byte_operation = decode_wordbyte_operation(first_byte);
-            let rm_result =
-                decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
-            let rm = rm_result.0.to_lowercase();
-            let bytes_consumed = rm_result.1;
-            let direction = decode_register_direction(first_byte);
-            if direction == RegisterDirection::SourceInRegField {
-                let result = format!("{} {}, {}", opcode, rm, reg);
-                Some((result, bytes_consumed))
-            } else {
-                let result = format!("{} {}, {}", opcode, reg, rm);
-                Some((result, bytes_consumed))
-            }
-        }
-        _ => None,
-    }
+    decode_rm_register("mov", instruction)
 }
 
 fn decode_mem_accumulator_address(instruction: &[u8]) -> u16  {
