@@ -32,7 +32,8 @@ enum OpCode {
     SubRmAndRegisterToEither,
     AddRmAndRegisterToEither,
     AddImmediateFromRm,
-    AddImmediateFromAccumulator
+    AddImmediateFromAccumulator,
+    CmpImmediateFromRm,
 }
 
 #[repr(u8)]
@@ -66,14 +67,28 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
         Ok(OpCode::SubRmAndRegisterToEither) => decode_sub_rm_and_register(&instruction_deref),
         Ok(OpCode::AddRmAndRegisterToEither) => decode_add_rm_and_register(&instruction_deref),
         Ok(OpCode::AddImmediateFromRm) => decode_add_immediate_from_rm(&instruction_deref),
-        Ok(OpCode::AddImmediateFromAccumulator) => decode_add_immediate_from_accumulator(&instruction_deref),
+        Ok(OpCode::AddImmediateFromAccumulator) => {
+            decode_add_immediate_from_accumulator(&instruction_deref)
+        }
+        Ok(OpCode::CmpImmediateFromRm) => decode_cmp_immediate_from_rm(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
 }
 
+fn decode_cmp_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
+    const OPCODE: &str = "cmp";
+    let first_byte = *instruction.first().unwrap();
+    let s_bit = (first_byte & 0b00000010) >> 1;
+    let r = decode_immediate_from_rm(instruction, s_bit == 1)?;
+    Some((
+        format!("{} {}, {}", OPCODE, r.register, r.value),
+        r.bit_consumed,
+    ))
+}
+
 fn decode_add_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
     let address = decode_mem_accumulator_address(instruction);
-    Some((format!("add ax, {}", address), 3)) 
+    Some((format!("add ax, {}", address), 3))
 }
 
 fn decode_add_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
@@ -303,7 +318,7 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
     const ACCUMULATOR_TO_MEMORY: u8 = 0b1010001;
     const RM_TO_SEGMENT: u8 = 0b10001110;
     const SEGMENT_TO_RM: u8 = 0b10001100;
-    const SUB_OR_ADD_IMMEDIATE_FROM_REGISTER: u8 = 0b100000;
+    const SUB_ADD_OR_CMP_IMMEDIATE_FROM_REGISTER: u8 = 0b100000;
     const SUB_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00101100;
     const SUB_RM_AND_REGISTER_TO_EITHER: u8 = 0b00101000;
     const ADD_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00000100;
@@ -325,13 +340,16 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
         }
         _ if first_byte.binary_starts_with(RM_TO_SEGMENT) => Ok(OpCode::RmToSegmentRegister),
         _ if first_byte.binary_starts_with(SEGMENT_TO_RM) => Ok(OpCode::SegmentRegisterToRm),
-        _ if first_byte.binary_starts_with(SUB_OR_ADD_IMMEDIATE_FROM_REGISTER) => match second_byte
+        _ if first_byte.binary_starts_with(SUB_ADD_OR_CMP_IMMEDIATE_FROM_REGISTER) => match second_byte
         {
             None => Err(format!("Invalid Opcode {:?}", first_byte)),
             Some(x) => {
-                if x.binary_at_equals(2, 0) && x.binary_at_equals(3, 0) && x.binary_at_equals(4, 0)
+                if x.binary_at_equals(3, 0) && x.binary_at_equals(4, 0) && x.binary_at_equals(5, 0)
                 {
+                    println!("x: {x:#b}");
                     Ok(OpCode::AddImmediateFromRm)
+                } else if x.binary_at_equals(3, 1) && x.binary_at_equals(4, 1) && x.binary_at_equals(5, 1) {
+                    Ok(OpCode::CmpImmediateFromRm)
                 } else {
                     Ok(OpCode::SubImmediateFromRm)
                 }
@@ -527,6 +545,72 @@ mod tests {
     }
 
     #[test]
+    fn test_decode_sub_immediate_from_accumulator() {
+        let test_cases = [
+            (vec![0b00101101, 0b00000101, 0b00001101], "sub ax, 3333", 3),
+            (vec![0b00101101, 0b11001110, 0b11011101], "sub ax, 56782", 3),
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);
+        }
+    }
+
+    #[test]
+    fn test_decode_cmp_immediate_from_rm() {
+        let test_cases = [
+            (vec![0b10000011, 0b11111000, 0b00110111], "cmp ax, 55", 3),
+            (
+                vec![0b10000001, 0b11111011, 0b00000011, 0b11011001],
+                "cmp bx, 55555",
+                4,
+            ),
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);
+        }
+    }
+
+    #[ignore = "wait"]
+    #[test]
+    fn test_decode_cmp_rm_with_register() {
+        let test_cases = [
+            (vec![0b00101001, 0b11001011], "sub bx, cx", 2),
+            (
+                vec![0b00101010, 0b10000000, 0b11111110, 0b11111101],
+                "sub al, [bx + si + 65022]",
+                4,
+            ),
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);
+        }
+    }
+
+    #[ignore = "wait"]
+    #[test]
+    fn test_decode_cmp_immediate_from_accumulator() {
+        let test_cases = [
+            (vec![0b00101101, 0b00000101, 0b00001101], "sub ax, 3333", 3),
+            (vec![0b00101101, 0b11001110, 0b11011101], "sub ax, 56782", 3),
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);
+        }
+    }
+
+    #[test]
     fn test_decode_add_rm_with_register() {
         let test_cases = [
             (vec![0b00000001, 0b11011000], "add ax, bx", 2),
@@ -557,20 +641,6 @@ mod tests {
                 "add al, [bx + si + 65022]",
                 4,
             ),
-        ];
-
-        for (encoded_instruction, expected, bytes_consumed) in test_cases {
-            let decoded_instruction = decode(&encoded_instruction).unwrap();
-            assert_eq!(expected, decoded_instruction.0);
-            assert_eq!(bytes_consumed, decoded_instruction.1);
-        }
-    }
-
-    #[test]
-    fn test_decode_sub_immediate_from_accumulator() {
-        let test_cases = [
-            (vec![0b00101101, 0b00000101, 0b00001101], "sub ax, 3333", 3),
-            (vec![0b00101101, 0b11001110, 0b11011101], "sub ax, 56782", 3),
         ];
 
         for (encoded_instruction, expected, bytes_consumed) in test_cases {
