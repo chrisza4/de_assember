@@ -72,27 +72,11 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
 fn decode_add_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
     const OPCODE: &str = "add";
     let first_byte = *instruction.first().unwrap();
-    let second_byte = instruction.get(1).unwrap();
-    let third_byte = instruction.get(2);
-    let fourth_byte = instruction.get(3);
-    let word_byte_operation = decode_wordbyte_operation(&first_byte);
     let s_bit = (first_byte & 0b00000010) >> 1;
-    let (register, bit_consumed_on_rm) =
-        decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
-
-    let data1 = instruction.get(bit_consumed_on_rm as usize);
-    let data2 = instruction.get((bit_consumed_on_rm as usize) + 1);
-
-    let (value, bit_consumed_on_data) =
-    if word_byte_operation == WordByteOperation::Word && s_bit == 0 {
-        (combined_u8(*data2.unwrap(), *data1.unwrap()), 2)
-    } else {
-        (*data1.unwrap() as u16, 1)
-    };
-
+    let r = decode_immediate_from_rm(instruction, s_bit == 1)?;
     Some((
-        format!("{} {}, {}", OPCODE, register.to_lowercase(), value),
-        bit_consumed_on_data + bit_consumed_on_rm,
+        format!("{} {}, {}", OPCODE, r.register, r.value),
+        r.bit_consumed,
     ))
 }
 
@@ -107,7 +91,7 @@ fn decode_rm_register(opcode: &str, instruction: &[u8]) -> Option<(String, u8)> 
     let fourth_byte = instruction.get(3);
     match (first_byte, second_byte) {
         (Some(first_byte), Some(second_byte)) => {
-            let reg = decode_reg_field(first_byte, second_byte).to_lowercase();
+            let reg = decode_reg_field(first_byte, second_byte);
             let word_byte_operation = decode_wordbyte_operation(first_byte);
             let rm_result =
                 decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
@@ -138,27 +122,11 @@ fn decode_sub_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, 
 fn decode_sub_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
     const OPCODE: &str = "sub";
     let first_byte = *instruction.first().unwrap();
-    let second_byte = instruction.get(1).unwrap();
-    let third_byte = instruction.get(2);
-    let fourth_byte = instruction.get(3);
-    let word_byte_operation = decode_wordbyte_operation(&first_byte);
     let s_bit = (first_byte & 0b00000010) >> 1;
-    let (register, bit_consumed_on_rm) =
-        decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
-
-    let data1 = instruction.get(bit_consumed_on_rm as usize);
-    let data2 = instruction.get((bit_consumed_on_rm as usize) + 1);
-
-    let (value, bit_consumed_on_data) =
-    if word_byte_operation == WordByteOperation::Word && s_bit == 0 {
-        (combined_u8(*data2.unwrap(), *data1.unwrap()), 2)
-    } else {
-        (*data1.unwrap() as u16, 1)
-    };
-
+    let r = decode_immediate_from_rm(instruction, s_bit == 1)?;
     Some((
-        format!("{} {}, {}", OPCODE, register.to_lowercase(), value),
-        bit_consumed_on_data + bit_consumed_on_rm,
+        format!("{} {}, {}", OPCODE, r.register, r.value),
+        r.bit_consumed,
     ))
 }
 
@@ -175,7 +143,7 @@ fn decode_segment_to_rm(instruction: &[u8]) -> Option<(String, u8)> {
     );
     let sr_bits = (second_byte & 0b0011000) >> 3;
     let sr = SR_TABLES[sr_bits as usize];
-    Some((format!("mov {}, {}", rm.to_lowercase(), sr), bytes_consumed))
+    Some((format!("mov {}, {}", rm, sr), bytes_consumed))
 }
 
 fn decode_rm_to_segment(instruction: &[u8]) -> Option<(String, u8)> {
@@ -191,7 +159,7 @@ fn decode_rm_to_segment(instruction: &[u8]) -> Option<(String, u8)> {
     );
     let sr_bits = (second_byte & 0b0011000) >> 3;
     let sr = SR_TABLES[sr_bits as usize];
-    Some((format!("mov {}, {}", sr, rm.to_lowercase()), bytes_consumed))
+    Some((format!("mov {}, {}", sr, rm), bytes_consumed))
 }
 
 struct ImmediateToRegister {
@@ -201,22 +169,20 @@ struct ImmediateToRegister {
     bit_consumed: u8
 }
 
-fn decode_immediate_to_register_or_memory(instruction: &[u8]) -> Option<ImmediateToRegister>  {    
+fn decode_immediate_from_rm(instruction: &[u8], signed_bit: bool) -> Option<ImmediateToRegister>  {    
     let first_byte = *instruction.first().unwrap();
     let second_byte = instruction.get(1).unwrap();
     let third_byte = instruction.get(2);
     let fourth_byte = instruction.get(3);
-    let word_byte_operation = if (first_byte & 0b00000001) == 0b00000001 {
-        WordByteOperation::Word
-    } else {
-        WordByteOperation::Byte
-    };
+    let word_byte_operation = decode_wordbyte_operation(&first_byte);
     let (register, bit_consumed_on_rm) =
         decode_rm_field(word_byte_operation, second_byte, third_byte, fourth_byte);
+
     let data1 = instruction.get(bit_consumed_on_rm as usize);
     let data2 = instruction.get((bit_consumed_on_rm as usize) + 1);
 
-    let (value, bit_consumed_on_data) = if word_byte_operation == WordByteOperation::Word {
+    let (value, bit_consumed_on_data) =
+    if word_byte_operation == WordByteOperation::Word && !signed_bit {
         (combined_u8(*data2.unwrap(), *data1.unwrap()), 2)
     } else {
         (*data1.unwrap() as u16, 1)
@@ -238,7 +204,7 @@ fn decode_immediate_to_register_or_memory(instruction: &[u8]) -> Option<Immediat
 
 fn decode_mov_immediate_to_register_or_memory(instruction: &[u8]) -> Option<(String, u8)> {
     const OPCODE: &str = "mov";
-    let r = decode_immediate_to_register_or_memory(instruction)?;
+    let r = decode_immediate_from_rm(instruction, false)?;
     Some((
         format!("{} {}, {} {}", OPCODE, r.register, r.identifier, r.value),
         r.bit_consumed,
@@ -263,7 +229,7 @@ fn decode_mov_immediate_to_register(instruction: &[u8]) -> Option<(String, u8)> 
         combined_u8(third_byte, second_byte)
     };
     let reg = decode_register(&register_bits, word_byte_operation);
-    let result = format!("{} {}, {}", opcode, reg.to_lowercase(), immediate);
+    let result = format!("{} {}, {}", opcode, reg, immediate);
     Some((result, bit_consumed))
 }
 
@@ -461,23 +427,23 @@ fn decode_effective_address(second_byte: &u8) -> String {
 
 fn decode_register(register_bits: &u8, word_byte_operation: WordByteOperation) -> String {
     match (word_byte_operation, register_bits) {
-        (WordByteOperation::Byte, 0b000) => String::from("AL"),
-        (WordByteOperation::Byte, 0b001) => String::from("CL"),
-        (WordByteOperation::Byte, 0b010) => String::from("DL"),
-        (WordByteOperation::Byte, 0b011) => String::from("BL"),
-        (WordByteOperation::Byte, 0b100) => String::from("AH"),
-        (WordByteOperation::Byte, 0b101) => String::from("CH"),
-        (WordByteOperation::Byte, 0b110) => String::from("DH"),
-        (WordByteOperation::Byte, 0b111) => String::from("BH"),
+        (WordByteOperation::Byte, 0b000) => String::from("al"),
+        (WordByteOperation::Byte, 0b001) => String::from("cl"),
+        (WordByteOperation::Byte, 0b010) => String::from("dl"),
+        (WordByteOperation::Byte, 0b011) => String::from("bl"),
+        (WordByteOperation::Byte, 0b100) => String::from("ah"),
+        (WordByteOperation::Byte, 0b101) => String::from("ch"),
+        (WordByteOperation::Byte, 0b110) => String::from("dh"),
+        (WordByteOperation::Byte, 0b111) => String::from("bh"),
 
-        (WordByteOperation::Word, 0b000) => String::from("AX"),
-        (WordByteOperation::Word, 0b001) => String::from("CX"),
-        (WordByteOperation::Word, 0b010) => String::from("DX"),
-        (WordByteOperation::Word, 0b011) => String::from("BX"),
-        (WordByteOperation::Word, 0b100) => String::from("SP"),
-        (WordByteOperation::Word, 0b101) => String::from("BP"),
-        (WordByteOperation::Word, 0b110) => String::from("SI"),
-        (WordByteOperation::Word, 0b111) => String::from("DI"),
+        (WordByteOperation::Word, 0b000) => String::from("ax"),
+        (WordByteOperation::Word, 0b001) => String::from("cx"),
+        (WordByteOperation::Word, 0b010) => String::from("dx"),
+        (WordByteOperation::Word, 0b011) => String::from("bx"),
+        (WordByteOperation::Word, 0b100) => String::from("sp"),
+        (WordByteOperation::Word, 0b101) => String::from("bp"),
+        (WordByteOperation::Word, 0b110) => String::from("si"),
+        (WordByteOperation::Word, 0b111) => String::from("di"),
         _ => String::new(),
     }
 }
@@ -762,73 +728,73 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_firstregister() {
+    fn test_decode_first_register() {
         // Case byte
         let first_byte_with_byte_mode: u8 = 0b10001000;
         assert_eq!(
-            "AL",
+            "al",
             decode_reg_field(&first_byte_with_byte_mode, &0b00000000)
         );
         assert_eq!(
-            "CL",
+            "cl",
             decode_reg_field(&first_byte_with_byte_mode, &0b00001000)
         );
         assert_eq!(
-            "DL",
+            "dl",
             decode_reg_field(&first_byte_with_byte_mode, &0b00010000)
         );
         assert_eq!(
-            "BL",
+            "bl",
             decode_reg_field(&first_byte_with_byte_mode, &0b00011000)
         );
         assert_eq!(
-            "AH",
+            "ah",
             decode_reg_field(&first_byte_with_byte_mode, &0b00100000)
         );
         assert_eq!(
-            "CH",
+            "ch",
             decode_reg_field(&first_byte_with_byte_mode, &0b00101000)
         );
         assert_eq!(
-            "DH",
+            "dh",
             decode_reg_field(&first_byte_with_byte_mode, &0b00110000)
         );
         assert_eq!(
-            "BH",
+            "bh",
             decode_reg_field(&first_byte_with_byte_mode, &0b00111000)
         );
 
         let first_byte_with_word_mode: u8 = 0b10001001;
         assert_eq!(
-            "AX",
+            "ax",
             decode_reg_field(&first_byte_with_word_mode, &0b00000000)
         );
         assert_eq!(
-            "CX",
+            "cx",
             decode_reg_field(&first_byte_with_word_mode, &0b00001000)
         );
         assert_eq!(
-            "DX",
+            "dx",
             decode_reg_field(&first_byte_with_word_mode, &0b00010000)
         );
         assert_eq!(
-            "BX",
+            "bx",
             decode_reg_field(&first_byte_with_word_mode, &0b00011000)
         );
         assert_eq!(
-            "SP",
+            "sp",
             decode_reg_field(&first_byte_with_word_mode, &0b00100000)
         );
         assert_eq!(
-            "BP",
+            "bp",
             decode_reg_field(&first_byte_with_word_mode, &0b00101000)
         );
         assert_eq!(
-            "SI",
+            "si",
             decode_reg_field(&first_byte_with_word_mode, &0b00110000)
         );
         assert_eq!(
-            "DI",
+            "di",
             decode_reg_field(&first_byte_with_word_mode, &0b00111000)
         );
     }
@@ -837,68 +803,68 @@ mod tests {
     fn test_decode_second_register() {
         // Case byte
         assert_eq!(
-            "AL",
+            "al",
             decode_rm_field(WordByteOperation::Byte, &0b11000000, None, None).0
         );
         assert_eq!(
-            "CL",
+            "cl",
             decode_rm_field(WordByteOperation::Byte, &0b11000001, None, None).0
         );
         assert_eq!(
-            "DL",
+            "dl",
             decode_rm_field(WordByteOperation::Byte, &0b11000010, None, None).0
         );
         assert_eq!(
-            "BL",
+            "bl",
             decode_rm_field(WordByteOperation::Byte, &0b11000011, None, None).0
         );
         assert_eq!(
-            "AH",
+            "ah",
             decode_rm_field(WordByteOperation::Byte, &0b11000100, None, None).0
         );
         assert_eq!(
-            "CH",
+            "ch",
             decode_rm_field(WordByteOperation::Byte, &0b11000101, None, None).0
         );
         assert_eq!(
-            "DH",
+            "dh",
             decode_rm_field(WordByteOperation::Byte, &0b11000110, None, None).0
         );
         assert_eq!(
-            "BH",
+            "bh",
             decode_rm_field(WordByteOperation::Byte, &0b11000111, None, None).0
         );
 
         assert_eq!(
-            "AX",
+            "ax",
             decode_rm_field(WordByteOperation::Word, &0b11000000, None, None).0
         );
         assert_eq!(
-            "CX",
+            "cx",
             decode_rm_field(WordByteOperation::Word, &0b11000001, None, None).0
         );
         assert_eq!(
-            "DX",
+            "dx",
             decode_rm_field(WordByteOperation::Word, &0b11000010, None, None).0
         );
         assert_eq!(
-            "BX",
+            "bx",
             decode_rm_field(WordByteOperation::Word, &0b11000011, None, None).0
         );
         assert_eq!(
-            "SP",
+            "sp",
             decode_rm_field(WordByteOperation::Word, &0b11000100, None, None).0
         );
         assert_eq!(
-            "BP",
+            "bp",
             decode_rm_field(WordByteOperation::Word, &0b11000101, None, None).0
         );
         assert_eq!(
-            "SI",
+            "si",
             decode_rm_field(WordByteOperation::Word, &0b11000110, None, None).0
         );
         assert_eq!(
-            "DI",
+            "di",
             decode_rm_field(WordByteOperation::Word, &0b11000111, None, None).0
         );
     }

@@ -4,8 +4,7 @@ use std::{env, fs, io};
 mod deassembler;
 mod simulator;
 fn main() {
-    println!("{:?}", 11_u8 / 2);
-    // run_simulate();
+    run_simulate();
 }
 
 #[allow(clippy::println_empty_string)]
