@@ -35,6 +35,7 @@ enum OpCode {
     AddImmediateFromAccumulator,
     CmpImmediateFromRm,
     CmpRmAndRegisterToEither,
+    CmpImmediateFromAccumulator,
 }
 
 #[repr(u8)]
@@ -73,8 +74,14 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
         }
         Ok(OpCode::CmpImmediateFromRm) => decode_cmp_immediate_from_rm(&instruction_deref),
         Ok(OpCode::CmpRmAndRegisterToEither) => decode_cmp_rm_and_register(&instruction_deref),
+        Ok(OpCode::CmpImmediateFromAccumulator) => decode_cmp_immediate_from_accumulator(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
+}
+
+fn decode_cmp_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
+    let address = decode_mem_accumulator_address(instruction);
+    Some((format!("cmp ax, {}", address), 3))
 }
 
 fn decode_cmp_rm_and_register(instruction: &[u8]) -> Option<(String, u8)> {
@@ -329,6 +336,7 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
     const SUB_RM_AND_REGISTER_TO_EITHER: u8 = 0b00101000;
     const ADD_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00000100;
     const ADD_RM_AND_REGISTER_TO_EITHER: u8 = 0b00000000;
+    const CMP_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00111100;
     const CMP_RM_AND_REGISTER_TO_EITHER: u8 = 0b00111000;
 
     match first_byte {
@@ -382,6 +390,9 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
         }
         _ if (first_byte ^ CMP_RM_AND_REGISTER_TO_EITHER) | 0b11 == 0b11 => {
             Ok(OpCode::CmpRmAndRegisterToEither)
+        }
+        _ if (first_byte ^ CMP_IMMEDIATE_FROM_ACCUMULATOR) | 1 == 1 => {
+            Ok(OpCode::CmpImmediateFromAccumulator)
         }
 
         _ => Err(format!("Invalid Opcode {:?}", first_byte)), // Handle unmatched cases if necessary
@@ -610,12 +621,11 @@ mod tests {
         }
     }
 
-    #[ignore = "wait"]
     #[test]
     fn test_decode_cmp_immediate_from_accumulator() {
         let test_cases = [
-            (vec![0b00101101, 0b00000101, 0b00001101], "sub ax, 3333", 3),
-            (vec![0b00101101, 0b11001110, 0b11011101], "sub ax, 56782", 3),
+            (vec![0b00111101, 0b00000101, 0b00001101], "cmp ax, 3333", 3),
+            (vec![0b00111101, 0b11001110, 0b11011101], "cmp ax, 56782", 3),
         ];
 
         for (encoded_instruction, expected, bytes_consumed) in test_cases {

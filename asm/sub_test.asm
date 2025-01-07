@@ -1,3 +1,3 @@
 bits 16
 
-cmp al, [bx + si + 65022]
+cmp ax, 56782
