@@ -34,6 +34,7 @@ enum OpCode {
     AddImmediateFromRm,
     AddImmediateFromAccumulator,
     CmpImmediateFromRm,
+    CmpRmAndRegisterToEither,
 }
 
 #[repr(u8)]
@@ -71,8 +72,13 @@ pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
             decode_add_immediate_from_accumulator(&instruction_deref)
         }
         Ok(OpCode::CmpImmediateFromRm) => decode_cmp_immediate_from_rm(&instruction_deref),
+        Ok(OpCode::CmpRmAndRegisterToEither) => decode_cmp_rm_and_register(&instruction_deref),
         Err(e) => panic!("{}", e),
     }
+}
+
+fn decode_cmp_rm_and_register(instruction: &[u8]) -> Option<(String, u8)> {
+    decode_rm_register("cmp", instruction)
 }
 
 fn decode_cmp_immediate_from_rm(instruction: &[u8]) -> Option<(String, u8)> {
@@ -323,6 +329,7 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
     const SUB_RM_AND_REGISTER_TO_EITHER: u8 = 0b00101000;
     const ADD_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00000100;
     const ADD_RM_AND_REGISTER_TO_EITHER: u8 = 0b00000000;
+    const CMP_RM_AND_REGISTER_TO_EITHER: u8 = 0b00111000;
 
     match first_byte {
         _ if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) => Ok(OpCode::RmToOrFromRegister),
@@ -340,21 +347,27 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
         }
         _ if first_byte.binary_starts_with(RM_TO_SEGMENT) => Ok(OpCode::RmToSegmentRegister),
         _ if first_byte.binary_starts_with(SEGMENT_TO_RM) => Ok(OpCode::SegmentRegisterToRm),
-        _ if first_byte.binary_starts_with(SUB_ADD_OR_CMP_IMMEDIATE_FROM_REGISTER) => match second_byte
-        {
-            None => Err(format!("Invalid Opcode {:?}", first_byte)),
-            Some(x) => {
-                if x.binary_at_equals(3, 0) && x.binary_at_equals(4, 0) && x.binary_at_equals(5, 0)
-                {
-                    println!("x: {x:#b}");
-                    Ok(OpCode::AddImmediateFromRm)
-                } else if x.binary_at_equals(3, 1) && x.binary_at_equals(4, 1) && x.binary_at_equals(5, 1) {
-                    Ok(OpCode::CmpImmediateFromRm)
-                } else {
-                    Ok(OpCode::SubImmediateFromRm)
+        _ if first_byte.binary_starts_with(SUB_ADD_OR_CMP_IMMEDIATE_FROM_REGISTER) => {
+            match second_byte {
+                None => Err(format!("Invalid Opcode {:?}", first_byte)),
+                Some(x) => {
+                    if x.binary_at_equals(3, 0)
+                        && x.binary_at_equals(4, 0)
+                        && x.binary_at_equals(5, 0)
+                    {
+                        println!("x: {x:#b}");
+                        Ok(OpCode::AddImmediateFromRm)
+                    } else if x.binary_at_equals(3, 1)
+                        && x.binary_at_equals(4, 1)
+                        && x.binary_at_equals(5, 1)
+                    {
+                        Ok(OpCode::CmpImmediateFromRm)
+                    } else {
+                        Ok(OpCode::SubImmediateFromRm)
+                    }
                 }
             }
-        },
+        }
         _ if (first_byte ^ SUB_IMMEDIATE_FROM_ACCUMULATOR) | 1 == 1 => {
             Ok(OpCode::SubImmediateFromAccumulator)
         }
@@ -366,6 +379,9 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
         }
         _ if (first_byte ^ ADD_IMMEDIATE_FROM_ACCUMULATOR) | 1 == 1 => {
             Ok(OpCode::AddImmediateFromAccumulator)
+        }
+        _ if (first_byte ^ CMP_RM_AND_REGISTER_TO_EITHER) | 0b11 == 0b11 => {
+            Ok(OpCode::CmpRmAndRegisterToEither)
         }
 
         _ => Err(format!("Invalid Opcode {:?}", first_byte)), // Handle unmatched cases if necessary
@@ -576,14 +592,13 @@ mod tests {
         }
     }
 
-    #[ignore = "wait"]
     #[test]
     fn test_decode_cmp_rm_with_register() {
         let test_cases = [
-            (vec![0b00101001, 0b11001011], "sub bx, cx", 2),
+            (vec![0b00111001, 0b11001011], "cmp bx, cx", 2),
             (
-                vec![0b00101010, 0b10000000, 0b11111110, 0b11111101],
-                "sub al, [bx + si + 65022]",
+                vec![0b00111010, 0b10000000, 0b11111110, 0b11111101],
+                "cmp al, [bx + si + 65022]",
                 4,
             ),
         ];
