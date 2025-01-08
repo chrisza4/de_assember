@@ -371,6 +371,19 @@ mod tests {
     }
 
     #[test]
+    fn simulate_sub_from_existing_state_no_flag_and_reg() {
+        let code = "sub ax, bx";
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
+            flags: HashSet::new(),
+        };
+
+        simulate_line(&mut current_state, code).unwrap();
+        assert_eq!(current_state.register["ax"], 1);
+        assert!(!current_state.flags.get_all_flags_sorted().contains("z"));
+    }
+
+    #[test]
     fn simulate_line_mov_with_existing_state() {
         let code = "mov bx, 4";
         let mut current_state = Cpu {

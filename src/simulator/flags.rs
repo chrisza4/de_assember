@@ -8,14 +8,14 @@ pub trait Flags {
 impl Flags for HashSet<char> {
     fn set_flag(&mut self, flag: char, value: bool) {
         if value {
-            &self.insert(flag);
+            self.insert(flag);
         } else {
-            &self.remove(&flag);
+            self.remove(&flag);
         }
     }
 
     fn get_all_flags_sorted(&self) -> String {
-        let mut flags: Vec<&char> = self.into_iter().collect();
+        let mut flags: Vec<&char> = self.iter().collect();
         flags.sort();
         String::from_iter(flags)
     }
@@ -23,8 +23,8 @@ impl Flags for HashSet<char> {
 
 #[cfg(test)]
 mod test {
-    use crate::simulator::flags::Flags;
     use std::collections::HashSet;
+    use crate::simulator::flags::Flags;
 
     #[test]
     fn test_get_and_set_flag() {
