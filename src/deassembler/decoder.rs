@@ -47,7 +47,7 @@ enum MovMode {
     RegisterToRegister = 3,
 }
 
-pub fn decode(instruction: &Vec<u8>) -> Option<(String, u8)> {
+pub fn decode(instruction: &[u8]) -> Option<(String, u8)> {
     let first_byte = instruction.first();
     let second_byte = instruction.get(1);
     let opcode = decode_opcode(first_byte.unwrap(), second_byte);
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn simple_immeidate_to_register() {
         let encoded_instruction = [177u8, 12, 181, 244];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
 
         assert_eq!("mov cl, 12", decoded_instruction.0);
         assert_eq!(2, decoded_instruction.1);
@@ -529,7 +529,7 @@ mod tests {
     #[test]
     fn decode_register_memory_to_segment_register() {
         let encoded_instruction = [142u8, 208];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
 
         assert_eq!("mov ss, ax", decoded_instruction.0);
         assert_eq!(2, decoded_instruction.1);
@@ -692,7 +692,7 @@ mod tests {
     #[test]
     fn decode_segment_register_to_rm() {
         let encoded_instruction = [140u8, 212];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
 
         assert_eq!("mov sp, ss", decoded_instruction.0);
         assert_eq!(2, decoded_instruction.1);
@@ -764,7 +764,7 @@ mod tests {
     #[test]
     fn immediate_to_register_instruction_byte() {
         let encoded_instruction = [198u8, 3, 7];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
         assert_eq!("mov [bp + di], byte 7", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
     }
@@ -772,7 +772,7 @@ mod tests {
     #[test]
     fn immediate_to_register_instruction_word() {
         let encoded_instruction = [199, 133, 133, 3, 91, 1];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
         assert_eq!("mov [di + 901], word 347", decoded_instruction.0);
         assert_eq!(6, decoded_instruction.1);
     }
@@ -780,12 +780,12 @@ mod tests {
     #[test]
     fn test_memory_to_accumulator() {
         let encoded_instruction = [161, 251, 9];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
         assert_eq!("mov ax, [2555]", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
 
         let encoded_instruction = [161, 16, 0];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
         assert_eq!("mov ax, [16]", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
     }
@@ -793,12 +793,12 @@ mod tests {
     #[test]
     fn test_accumulator_to_memory() {
         let encoded_instruction = [163, 15, 0];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
         assert_eq!("mov [15], ax", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
 
         let encoded_instruction = [163, 250, 9];
-        let decoded_instruction = decode(&encoded_instruction.into()).unwrap();
+        let decoded_instruction = decode(&encoded_instruction).unwrap();
         assert_eq!("mov [2554], ax", decoded_instruction.0);
         assert_eq!(3, decoded_instruction.1);
     }

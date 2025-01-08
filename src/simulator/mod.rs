@@ -21,7 +21,7 @@ pub fn simulate_from_code(code: String) -> Result<HashMap<String, u16>, ParseAss
     Ok(result)
 }
 
-pub fn simulate_from_binary(binary: &Vec<u8>) -> Result<HashMap<String, u16>, ParseAssemblyError> {
+pub fn simulate_from_binary(binary: &[u8]) -> Result<HashMap<String, u16>, ParseAssemblyError> {
     let mut result = HashMap::<String, u16>::new();
     let mut pointer = 0;
     while binary.get(pointer).is_some() {
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn test_simulate_from_binary() {
         let binary = [185, 3, 0, 184, 4, 0, 137, 195]; // From asm/test_simulation
-        let result = simulate_from_binary(&binary.into()).unwrap();
+        let result = simulate_from_binary(&binary).unwrap();
 
         assert_eq!(result["ax"], 4);
         assert_eq!(result["bx"], 4);
