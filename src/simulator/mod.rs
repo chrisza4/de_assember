@@ -1,21 +1,25 @@
+use flags::Flags;
 use register_set::RegisterSet;
 
 use crate::deassembler::decoder::decode;
-use std::{cmp::min, collections::HashMap};
+use std::{
+    cmp::min,
+    collections::{HashMap, HashSet},
+};
 
-mod register_set;
 mod flags;
+mod register_set;
 
 pub struct Cpu {
     pub register: HashMap<String, u16>,
-    pub flags: HashMap<char, bool>
+    pub flags: HashSet<char>,
 }
 
 #[allow(dead_code)]
 pub fn simulate_from_code(code: String) -> Result<Cpu, ParseAssemblyError> {
     let mut result = Cpu {
         register: HashMap::<String, u16>::new(),
-        flags: HashMap::new(),
+        flags: HashSet::new(),
     };
     let lines = code.split('\n');
     for line in lines {
@@ -33,7 +37,7 @@ pub fn simulate_from_code(code: String) -> Result<Cpu, ParseAssemblyError> {
 pub fn simulate_from_binary(binary: &[u8]) -> Result<Cpu, ParseAssemblyError> {
     let mut result = Cpu {
         register: HashMap::<String, u16>::new(),
-        flags: HashMap::new(),
+        flags: HashSet::new(),
     };
     let mut pointer = 0;
     while binary.get(pointer).is_some() {
@@ -49,10 +53,7 @@ pub fn simulate_from_binary(binary: &[u8]) -> Result<Cpu, ParseAssemblyError> {
     Ok(result)
 }
 
-pub fn simulate_line(
-    state: &mut Cpu,
-    line: &str,
-) -> Result<(), ParseAssemblyError> {
+pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyError> {
     let assembly = parse_assembly_code(line);
     println!("Asm: {}", line);
     match assembly {
@@ -63,6 +64,19 @@ pub fn simulate_line(
             let val = state.register.get_by_reg_name(&from_reg).unwrap();
 
             state.register.insert_by_reg_name(&register, val);
+        }
+        Ok(Assembly::Sub(register, RegisterOrValue::Register(from_reg))) => {
+            let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
+            let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
+            let new_val = current_val - val;
+            state.register.insert_by_reg_name(&register, new_val);
+            state.flags.set_flag('z', new_val == 0);
+        }
+        Ok(Assembly::Sub(register, RegisterOrValue::Value(val))) => {
+            let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
+            let new_val = current_val - val;
+            state.register.insert_by_reg_name(&register, new_val);
+            state.flags.set_flag('z', new_val == 0);
         }
         Ok(Assembly::Bit) => (),
         Err(e) => return Err(e),
@@ -77,6 +91,7 @@ enum RegisterOrValue {
 
 enum Assembly {
     Mov(String, RegisterOrValue),
+    Sub(String, RegisterOrValue),
     Bit,
 }
 
@@ -94,24 +109,34 @@ fn strip_comment(code: &str) -> &str {
     }
 }
 
+fn parse_2_params<'a>(
+    command: &str,
+    params: Option<&'a str>,
+) -> Result<(&'a str, &'a str), ParseAssemblyError> {
+    let Some(params) = params else {
+        return Err(ParseAssemblyError::InvalidParams(format!(
+            "{command} required a parameter"
+        )));
+    };
+    let move_params: Vec<&str> = params.split(',').collect();
+    let param1 = move_params.first().unwrap();
+    let Some(param2) = move_params.get(1).map(|x| x.trim()) else {
+        return Err(ParseAssemblyError::InvalidParams(format!(
+            "{command} required 2 parameters"
+        )));
+    };
+
+    Ok((*param1, param2))
+}
+
 fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
     let code_without_comment = strip_comment(code);
     let command_and_params = code_without_comment.trim().split_once(' ');
     let command = command_and_params.map(|x| x.0).unwrap_or(code);
     match command {
         "mov" => {
-            let Some(params) = command_and_params.map(|x| x.1) else {
-                return Err(ParseAssemblyError::InvalidParams(
-                    "Mov required a parameter".to_string(),
-                ));
-            };
-            let move_params: Vec<&str> = params.split(',').collect();
-            let register_to_mov_to = move_params.first().unwrap();
-            let Some(value) = move_params.get(1).map(|x| x.trim()) else {
-                return Err(ParseAssemblyError::InvalidParams(
-                    "Mov required 2 parameters".to_string(),
-                ));
-            };
+            let (register_to_mov_to, value) =
+                parse_2_params(command, command_and_params.map(|x| x.1))?;
             match value.parse::<u16>() {
                 Ok(u) => Ok(Assembly::Mov(
                     register_to_mov_to.to_string(),
@@ -119,6 +144,19 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
                 )),
                 Err(_) => Ok(Assembly::Mov(
                     register_to_mov_to.to_string(),
+                    RegisterOrValue::Register(value.to_string()),
+                )),
+            }
+        }
+        "sub" => {
+            let (register, value) = parse_2_params(command, command_and_params.map(|x| x.1))?;
+            match value.parse::<u16>() {
+                Ok(u) => Ok(Assembly::Sub(
+                    register.to_string(),
+                    RegisterOrValue::Value(u),
+                )),
+                Err(_) => Ok(Assembly::Sub(
+                    register.to_string(),
                     RegisterOrValue::Register(value.to_string()),
                 )),
             }
@@ -133,9 +171,9 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
 
-    use crate::simulator::{simulate_line, Cpu, ParseAssemblyError};
+    use crate::simulator::{flags::Flags, simulate_line, Cpu, ParseAssemblyError};
 
     use super::{simulate_from_binary, simulate_from_code};
     #[test]
@@ -192,7 +230,7 @@ mod tests {
         let code = "bits 16";
         let mut current_state = Cpu {
             register: HashMap::new(),
-            flags: HashMap::new()
+            flags: HashSet::new(),
         };
         let result = simulate_line(&mut current_state, code);
         assert_eq!(result, Ok(()));
@@ -204,7 +242,7 @@ mod tests {
         let code = "mov ax, 3";
         let mut current_state = Cpu {
             register: HashMap::new(),
-            flags: HashMap::new()
+            flags: HashSet::new(),
         };
         simulate_line(&mut current_state, code).unwrap();
 
@@ -216,7 +254,7 @@ mod tests {
         let code = "mov ax, bx";
         let mut current_state = Cpu {
             register: HashMap::new(),
-            flags: HashMap::new()
+            flags: HashSet::new(),
         };
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();
@@ -228,7 +266,7 @@ mod tests {
         let code = "mov";
         let mut current_state = Cpu {
             register: HashMap::new(),
-            flags: HashMap::new()
+            flags: HashSet::new(),
         };
         // let result = simue(code.to_string());
         let result = simulate_line(&mut current_state, code);
@@ -236,7 +274,7 @@ mod tests {
         assert_eq!(
             result,
             Err(ParseAssemblyError::InvalidParams(
-                "Mov required a parameter".to_string()
+                "mov required a parameter".to_string()
             ))
         );
     }
@@ -246,16 +284,90 @@ mod tests {
         let code = "mov ax";
         let mut current_state = Cpu {
             register: HashMap::new(),
-            flags: HashMap::new()
+            flags: HashSet::new(),
         };
         let result = simulate_line(&mut current_state, code);
 
         assert_eq!(
             result,
             Err(ParseAssemblyError::InvalidParams(
-                "Mov required 2 parameters".to_string()
+                "mov required 2 parameters".to_string()
             ))
         );
+    }
+
+    #[test]
+    fn sub_err_without_params() {
+        let code = "sub";
+        let mut current_state = Cpu {
+            register: HashMap::new(),
+            flags: HashSet::new(),
+        };
+        // let result = simue(code.to_string());
+        let result = simulate_line(&mut current_state, code);
+
+        assert_eq!(
+            result,
+            Err(ParseAssemblyError::InvalidParams(
+                "sub required a parameter".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn sub_err_without_value() {
+        let code = "sub ax";
+        let mut current_state = Cpu {
+            register: HashMap::new(),
+            flags: HashSet::new(),
+        };
+        let result = simulate_line(&mut current_state, code);
+
+        assert_eq!(
+            result,
+            Err(ParseAssemblyError::InvalidParams(
+                "sub required 2 parameters".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn simulate_sub_from_existing_state_no_flag() {
+        let code = "sub ax, 2";
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([("ax".to_string(), 6u16)]),
+            flags: HashSet::new(),
+        };
+
+        simulate_line(&mut current_state, code).unwrap();
+        assert_eq!(current_state.register["ax"], 4);
+        assert!(!current_state.flags.get_all_flags_sorted().contains("z"));
+    }
+
+    #[test]
+    fn simulate_sub_from_existing_state_with_flag() {
+        let code = "sub ax, 6";
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([("ax".to_string(), 6u16)]),
+            flags: HashSet::new(),
+        };
+
+        simulate_line(&mut current_state, code).unwrap();
+        assert_eq!(current_state.register["ax"], 0);
+        assert!(current_state.flags.get_all_flags_sorted().contains("z"));
+    }
+
+    #[test]
+    fn simulate_sub_from_existing_state_with_flag_and_reg() {
+        let code = "sub ax, bx";
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 6u16)]),
+            flags: HashSet::new(),
+        };
+
+        simulate_line(&mut current_state, code).unwrap();
+        assert_eq!(current_state.register["ax"], 0);
+        assert!(current_state.flags.get_all_flags_sorted().contains("z"));
     }
 
     #[test]
@@ -263,7 +375,7 @@ mod tests {
         let code = "mov bx, 4";
         let mut current_state = Cpu {
             register: HashMap::new(),
-            flags: HashMap::new()
+            flags: HashSet::new(),
         };
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();

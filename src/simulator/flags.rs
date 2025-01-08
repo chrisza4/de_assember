@@ -1,17 +1,21 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub trait Flags {
-    fn set_flag(&mut self, flag: char, value: bool) -> Option<bool>;
+    fn set_flag(&mut self, flag: char, value: bool);
     fn get_all_flags_sorted(&self) -> String;
 }
 
-impl Flags for HashMap<char, bool> {
-    fn set_flag(&mut self, flag: char, value: bool) -> Option<bool> {
-        self.insert(flag, value)
+impl Flags for HashSet<char> {
+    fn set_flag(&mut self, flag: char, value: bool) {
+        if value {
+            &self.insert(flag);
+        } else {
+            &self.remove(&flag);
+        }
     }
 
     fn get_all_flags_sorted(&self) -> String {
-        let mut flags: Vec<&char> = self.keys().collect();
+        let mut flags: Vec<&char> = self.into_iter().collect();
         flags.sort();
         String::from_iter(flags)
     }
@@ -19,12 +23,12 @@ impl Flags for HashMap<char, bool> {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
     use crate::simulator::flags::Flags;
+    use std::collections::HashSet;
 
     #[test]
     fn test_get_and_set_flag() {
-        let mut flags = HashMap::<char, bool>::new();
+        let mut flags = HashSet::<char>::new();
         flags.set_flag('c', true);
         flags.set_flag('b', true);
         flags.set_flag('x', true);
