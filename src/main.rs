@@ -30,7 +30,7 @@ fn run_simulate() {
                 "ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "ss", "ds",
             ];
             for register in REGISTERS {
-                let value = result.get(register).unwrap_or(&0);
+                let value = result.register.get(register).unwrap_or(&0);
                 println!("{:?}: {:#04x}", register, value);
             }
         }
