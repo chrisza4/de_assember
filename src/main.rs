@@ -1,8 +1,11 @@
 #[allow(unused_imports)]
 use std::{env, fs, io};
 
+use simulator::flags::Flags;
+
 mod deassembler;
 mod simulator;
+
 fn main() {
     run_simulate();
 }
@@ -31,8 +34,9 @@ fn run_simulate() {
             ];
             for register in REGISTERS {
                 let value = result.register.get(register).unwrap_or(&0);
-                println!("{:?}: {:#04x}", register, value);
+                println!("{:?}: {:#06x}", register, value);
             }
+            println!("Flags: {}", result.flags.get_all_flags_sorted());
         }
         Err(err) => println!("Error loading file: {}", err),
     }

@@ -7,7 +7,7 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-mod flags;
+pub mod flags;
 mod register_set;
 
 pub struct Cpu {
