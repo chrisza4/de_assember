@@ -24,7 +24,7 @@ impl Default for Cpu {
 
 pub trait RmvStore {
     fn get_by_rmv(&self, address: Rmv) -> u16;
-    fn set_by_rmv(&mut self, address: Rmv);
+    fn set_by_rmv(&mut self, address: Rmv, value: u16);
 }
 
 impl RmvStore for Cpu {
@@ -54,8 +54,31 @@ impl RmvStore for Cpu {
         }
     }
 
-    fn set_by_rmv(&mut self, address: Rmv) {
-        todo!()
+    fn set_by_rmv(&mut self, address: Rmv, value: u16) {
+        match address {
+            Rmv::Memory(memory_address_str) => {
+                let memory_index: u16 = memory_address_str
+                    .split("+")
+                    .map(|x| {
+                        let memory_or_register = x.trim();
+                        match memory_or_register.parse::<u16>() {
+                            Ok(v) => v,
+                            Err(_) => self
+                                .register
+                                .get_by_reg_name(memory_or_register)
+                                .unwrap_or(0),
+                        }
+                    })
+                    .sum();
+                let memory_index = memory_index as usize;
+                self.memory[memory_index + 1] = (value % 256) as u8;
+                self.memory[memory_index] = (value >> 8) as u8;
+            }
+            Rmv::Register(register) => {
+                self.register.insert_by_reg_name(&register, value);
+            }
+            Rmv::Value(_) => todo!("No set to value"),
+        }
     }
 }
 
@@ -95,4 +118,35 @@ mod tests {
         cpu.register.insert("ax".to_string(), 10);
         assert_eq!(cpu.get_by_rmv(Rmv::Register("ax".to_string())), 10);
     }
+
+    #[test]
+    fn test_set_by_rmv_memory() {
+        let mut cpu = Cpu::default();
+        cpu.set_by_rmv(Rmv::Memory("34".to_string()), 3456);
+        let first_byte = cpu.memory[34];
+        let second_byte = cpu.memory[35];
+        assert_eq!(combined_u8(first_byte, second_byte), 3456);
+    }
+
+    #[test]
+    fn test_set_by_rmv_memory_register_combined() {
+        let mut cpu = Cpu::default();
+        cpu.register.insert("ax".to_string(), 10);
+        cpu.set_by_rmv(Rmv::Memory("ax + 5".to_string()), 3021);
+        assert_eq!(cpu.get_by_rmv(Rmv::Memory("ax + 5".to_string())), 3021);
+    }
+
+    #[test]
+    fn test_set_by_register() {
+        let mut cpu = Cpu::default();
+        cpu.set_by_rmv(Rmv::Register("ax".to_string()), 3021);
+        assert_eq!(cpu.get_by_rmv(Rmv::Register("ax".to_string())), 3021);
+    }
+
+    // #[test]
+    // fn test_get_by_rmv_register() {
+    //     let mut cpu = Cpu::default();
+    //     cpu.register.insert("ax".to_string(), 10);
+    //     assert_eq!(cpu.get_by_rmv(Rmv::Register("ax".to_string())), 10);
+    // }
 }
