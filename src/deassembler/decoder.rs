@@ -2,7 +2,7 @@ use num_enum::TryFromPrimitive;
 
 use binary::{combined_u8, BinaryOperator};
 
-use super::binary;
+use crate::binary;
 
 #[repr(u8)]
 #[derive(PartialEq, Debug)]

@@ -5,6 +5,7 @@ use simulator::flags::Flags;
 
 mod deassembler;
 mod simulator;
+mod binary;
 
 fn main() {
     run_simulate();

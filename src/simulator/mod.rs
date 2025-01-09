@@ -1,7 +1,8 @@
+use cpu::{Cpu, RmvStore};
 use flags::Flags;
 use register_set::RegisterSet;
 
-use crate::deassembler::decoder::decode;
+use crate::{binary::combined_u8, deassembler::decoder::decode};
 use params::Rmv;
 use std::{
     cmp::min,
@@ -11,13 +12,7 @@ use std::{
 pub mod flags;
 pub mod params;
 mod register_set;
-
-pub struct Cpu {
-    pub register: HashMap<String, u16>,
-    pub flags: HashSet<char>,
-    pub pointer: usize,
-    pub memory: Vec<u8>,
-}
+mod cpu;
 
 trait RegisterBits {
     fn has_signed_bit(self) -> bool;
@@ -80,24 +75,14 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
     let assembly = parse_assembly_code(line);
     println!("Asm: {}", line);
     match assembly {
-        Ok(Assembly::Mov(register, Rmv::Value(val))) => {
+        Ok(Assembly::Mov(register, rmv2)) => {
+            let val = state.get_by_rmv(rmv2);
             match register {
                 Rmv::Memory(_) => todo!(),
                 Rmv::Register(register) => state.register.insert_by_reg_name(&register, val),
                 Rmv::Value(_) => panic!("Cannot move to value"),
             };
-        }
-        Ok(Assembly::Mov(register, Rmv::Register(from_reg))) => {
-            let val = state.register.get_by_reg_name(&from_reg).unwrap();
-            match register {
-                Rmv::Memory(_) => todo!(),
-                Rmv::Register(register) => state.register.insert_by_reg_name(&register, val),
-                Rmv::Value(_) => panic!("Cannot move to value"),
-            };
-        }
-        Ok(Assembly::Mov(register, Rmv::Memory(memory_address))) => {
-            todo!()
-        }
+        },
         Ok(Assembly::Sub(register, Rmv::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
@@ -255,8 +240,11 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
 mod tests {
     use std::collections::{HashMap, HashSet};
 
-    use crate::simulator::{
-        flags::Flags, register_set::RegisterSet, simulate_line, Cpu, ParseAssemblyError,
+    use crate::{
+        binary::combined_u8,
+        simulator::{
+            flags::Flags, register_set::RegisterSet, simulate_line, Cpu, ParseAssemblyError,
+        },
     };
 
     use super::{simulate_from_binary, simulate_from_code};
@@ -349,6 +337,29 @@ mod tests {
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();
         assert_eq!(current_state.register["ax"], 3);
+    }
+
+    #[test]
+    fn test_mov_register_to_memory_3_address() {
+        let code = "mov ax, [bp + si + 30]";
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([
+                ("ax".to_string(), 999),
+                ("bp".to_string(), 4),
+                ("si".to_string(), 6),
+            ]),
+            flags: HashSet::new(),
+            pointer: 0,
+            memory: vec![0; 1048527],
+        };
+        current_state.memory[40] = 20;
+        current_state.memory[41] = 30;
+        let expected = combined_u8(20, 30);
+        simulate_line(&mut current_state, code).unwrap();
+        assert_eq!(
+            current_state.register.get_by_reg_name("ax").unwrap(),
+            expected
+        );
     }
 
     #[test]
