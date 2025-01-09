@@ -75,9 +75,9 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
     let assembly = parse_assembly_code(line);
     println!("Asm: {}", line);
     match assembly {
-        Ok(Assembly::Mov(register, rmv2)) => {
+        Ok(Assembly::Mov(rmv1, rmv2)) => {
             let val = state.get_by_rmv(&rmv2);
-            state.set_by_rmv(&register, val);
+            state.set_by_rmv(&rmv1, val);
         },
         Ok(Assembly::Sub(register, Rmv::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
