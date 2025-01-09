@@ -2,11 +2,11 @@ use flags::Flags;
 use register_set::RegisterSet;
 
 use crate::deassembler::decoder::decode;
+use params::Rmv;
 use std::{
     cmp::min,
     collections::{HashMap, HashSet},
 };
-use params::Rmv;
 
 pub mod flags;
 pub mod params;
@@ -16,7 +16,7 @@ pub struct Cpu {
     pub register: HashMap<String, u16>,
     pub flags: HashSet<char>,
     pub pointer: usize,
-    pub memory: Vec<u8>
+    pub memory: Vec<u8>,
 }
 
 trait RegisterBits {
@@ -81,12 +81,19 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
     println!("Asm: {}", line);
     match assembly {
         Ok(Assembly::Mov(register, Rmv::Value(val))) => {
-            state.register.insert_by_reg_name(&register, val);
+            match register {
+                Rmv::Memory(_) => todo!(),
+                Rmv::Register(register) => state.register.insert_by_reg_name(&register, val),
+                Rmv::Value(_) => panic!("Cannot move to value"),
+            };
         }
         Ok(Assembly::Mov(register, Rmv::Register(from_reg))) => {
             let val = state.register.get_by_reg_name(&from_reg).unwrap();
-
-            state.register.insert_by_reg_name(&register, val);
+            match register {
+                Rmv::Memory(_) => todo!(),
+                Rmv::Register(register) => state.register.insert_by_reg_name(&register, val),
+                Rmv::Value(_) => panic!("Cannot move to value"),
+            };
         }
         Ok(Assembly::Mov(register, Rmv::Memory(memory_address))) => {
             todo!()
@@ -157,7 +164,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
 }
 
 enum Assembly {
-    Mov(String, Rmv),
+    Mov(Rmv, Rmv),
     Sub(String, Rmv),
     Cmp(String, Rmv),
     Add(String, Rmv),
@@ -207,56 +214,24 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
         "mov" => {
             let (register_to_mov_to, value) =
                 parse_2_params(command, command_and_params.map(|x| x.1))?;
-            match value.parse::<u16>() {
-                Ok(u) => Ok(Assembly::Mov(
-                    register_to_mov_to.to_string(),
-                    Rmv::Value(u),
-                )),
-                Err(_) => Ok(Assembly::Mov(
-                    register_to_mov_to.to_string(),
-                    Rmv::Register(value.to_string()),
-                )),
-            }
+            let rmv = Rmv::from_str(value);
+            Ok(Assembly::Mov(Rmv::from_str(register_to_mov_to), rmv))
         }
         "sub" => {
             let (register, value) = parse_2_params(command, command_and_params.map(|x| x.1))?;
-            match value.parse::<u16>() {
-                Ok(u) => Ok(Assembly::Sub(
-                    register.to_string(),
-                    Rmv::Value(u),
-                )),
-                Err(_) => Ok(Assembly::Sub(
-                    register.to_string(),
-                    Rmv::Register(value.to_string()),
-                )),
-            }
+            let rmv = Rmv::from_str(value);
+            Ok(Assembly::Sub(register.to_string(), rmv))
         }
         "cmp" => {
             let (register, value) = parse_2_params(command, command_and_params.map(|x| x.1))?;
-            match value.parse::<u16>() {
-                Ok(u) => Ok(Assembly::Cmp(
-                    register.to_string(),
-                    Rmv::Value(u),
-                )),
-                Err(_) => Ok(Assembly::Cmp(
-                    register.to_string(),
-                    Rmv::Register(value.to_string()),
-                )),
-            }
+            let rmv = Rmv::from_str(value);
+            Ok(Assembly::Cmp(register.to_string(), rmv))
         }
 
         "add" => {
             let (register, value) = parse_2_params(command, command_and_params.map(|x| x.1))?;
-            match value.parse::<u16>() {
-                Ok(u) => Ok(Assembly::Add(
-                    register.to_string(),
-                    Rmv::Value(u),
-                )),
-                Err(_) => Ok(Assembly::Add(
-                    register.to_string(),
-                    Rmv::Register(value.to_string()),
-                )),
-            }
+            let rmv = Rmv::from_str(value);
+            Ok(Assembly::Add(register.to_string(), rmv))
         }
         "bits" => Ok(Assembly::Bit),
         "jnz" => {
