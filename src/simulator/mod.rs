@@ -15,6 +15,17 @@ pub struct Cpu {
     pub flags: HashSet<char>,
 }
 
+trait RegisterBits {
+    fn has_signed_flag(self) -> bool;
+}
+
+impl RegisterBits for u16 {
+    fn has_signed_flag(self) -> bool {
+        const SIGNED_FLAG_MUST_BE_OVER: u16 = 2u16.pow(7);
+        self >= SIGNED_FLAG_MUST_BE_OVER
+    }
+}
+
 #[allow(dead_code)]
 pub fn simulate_from_code(code: String) -> Result<Cpu, ParseAssemblyError> {
     let mut result = Cpu {
@@ -68,16 +79,47 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
         Ok(Assembly::Sub(register, RegisterOrValue::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
-            let new_val = current_val - val;
+            let new_val = current_val.wrapping_sub(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
+            state.flags.set_flag('s', new_val.has_signed_flag());
         }
         Ok(Assembly::Sub(register, RegisterOrValue::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
-            let new_val = current_val - val;
+            let new_val = current_val.wrapping_sub(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
+            state.flags.set_flag('s', new_val.has_signed_flag());
         }
+        Ok(Assembly::Cmp(register, RegisterOrValue::Register(from_reg))) => {
+            let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
+            let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
+            let new_val = current_val.wrapping_sub(val);
+            state.flags.set_flag('z', new_val == 0);
+            state.flags.set_flag('s', new_val.has_signed_flag());
+        }
+        Ok(Assembly::Cmp(register, RegisterOrValue::Value(val))) => {
+            let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
+            let new_val = current_val.wrapping_sub(val);
+            state.flags.set_flag('z', new_val == 0);
+            state.flags.set_flag('s', new_val.has_signed_flag());
+        }
+        Ok(Assembly::Add(register, RegisterOrValue::Register(from_reg))) => {
+            let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
+            let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
+            let new_val = current_val.wrapping_add(val);
+            state.register.insert_by_reg_name(&register, new_val);
+            state.flags.set_flag('z', new_val == 0);
+            state.flags.set_flag('s', new_val.has_signed_flag());
+        }
+        Ok(Assembly::Add(register, RegisterOrValue::Value(val))) => {
+            let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
+            let new_val = current_val.wrapping_add(val);
+            state.register.insert_by_reg_name(&register, new_val);
+            state.flags.set_flag('z', new_val == 0);
+            state.flags.set_flag('s', new_val.has_signed_flag());
+        }
+
         Ok(Assembly::Bit) => (),
         Err(e) => return Err(e),
     };
@@ -92,6 +134,8 @@ enum RegisterOrValue {
 enum Assembly {
     Mov(String, RegisterOrValue),
     Sub(String, RegisterOrValue),
+    Cmp(String, RegisterOrValue),
+    Add(String, RegisterOrValue),
     Bit,
 }
 
@@ -161,6 +205,33 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
                 )),
             }
         }
+        "cmp" => {
+            let (register, value) = parse_2_params(command, command_and_params.map(|x| x.1))?;
+            match value.parse::<u16>() {
+                Ok(u) => Ok(Assembly::Cmp(
+                    register.to_string(),
+                    RegisterOrValue::Value(u),
+                )),
+                Err(_) => Ok(Assembly::Cmp(
+                    register.to_string(),
+                    RegisterOrValue::Register(value.to_string()),
+                )),
+            }
+        }
+
+        "add" => {
+            let (register, value) = parse_2_params(command, command_and_params.map(|x| x.1))?;
+            match value.parse::<u16>() {
+                Ok(u) => Ok(Assembly::Add(
+                    register.to_string(),
+                    RegisterOrValue::Value(u),
+                )),
+                Err(_) => Ok(Assembly::Add(
+                    register.to_string(),
+                    RegisterOrValue::Register(value.to_string()),
+                )),
+            }
+        }
         "bits" => Ok(Assembly::Bit),
         _ => {
             println!("Parse error for {:?}", command);
@@ -173,11 +244,13 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
 mod tests {
     use std::collections::{HashMap, HashSet};
 
-    use crate::simulator::{flags::Flags, simulate_line, Cpu, ParseAssemblyError};
+    use crate::simulator::{
+        flags::Flags, register_set::RegisterSet, simulate_line, Cpu, ParseAssemblyError,
+    };
 
     use super::{simulate_from_binary, simulate_from_code};
     #[test]
-    fn simulate_simple_mov() {
+    fn test_simulate_simple_mov() {
         let code = "mov ax, 3";
         let result = simulate_from_code(code.to_string()).unwrap();
 
@@ -185,7 +258,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_multiline_mov() {
+    fn test_simulate_multiline_mov() {
         let code = "mov ax, 3
       mov bx, 4";
         let result = simulate_from_code(code.to_string()).unwrap();
@@ -195,7 +268,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_multiline_mov_with_comment() {
+    fn test_simulate_multiline_mov_with_comment() {
         let code = "mov ax, 3 ;comment
       mov bx, 4";
         let result = simulate_from_code(code.to_string()).unwrap();
@@ -205,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_mov_register() {
+    fn test_simulate_mov_register() {
         let code = "mov ax, 3
       mov bx, ax";
         let result = simulate_from_code(code.to_string()).unwrap();
@@ -215,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_multiline_mov_with_blank_lines() {
+    fn test_simulate_multiline_mov_with_blank_lines() {
         let code = "mov ax, 3
 
       mov bx, 4";
@@ -226,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn bit_do_nothing() {
+    fn test_bit_do_nothing() {
         let code = "bits 16";
         let mut current_state = Cpu {
             register: HashMap::new(),
@@ -238,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_line_simple_mov() {
+    fn test_simulate_line_simple_mov() {
         let code = "mov ax, 3";
         let mut current_state = Cpu {
             register: HashMap::new(),
@@ -250,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_line_mov_register() {
+    fn test_simulate_line_mov_register() {
         let code = "mov ax, bx";
         let mut current_state = Cpu {
             register: HashMap::new(),
@@ -262,13 +335,12 @@ mod tests {
     }
 
     #[test]
-    fn mov_err_without_params() {
+    fn test_mov_err_without_params() {
         let code = "mov";
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
         };
-        // let result = simue(code.to_string());
         let result = simulate_line(&mut current_state, code);
 
         assert_eq!(
@@ -280,7 +352,7 @@ mod tests {
     }
 
     #[test]
-    fn mov_err_without_value() {
+    fn test_mov_err_without_value() {
         let code = "mov ax";
         let mut current_state = Cpu {
             register: HashMap::new(),
@@ -297,7 +369,7 @@ mod tests {
     }
 
     #[test]
-    fn sub_err_without_params() {
+    fn test_sub_err_without_params() {
         let code = "sub";
         let mut current_state = Cpu {
             register: HashMap::new(),
@@ -315,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn sub_err_without_value() {
+    fn test_sub_err_without_value() {
         let code = "sub ax";
         let mut current_state = Cpu {
             register: HashMap::new(),
@@ -332,7 +404,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_sub_from_existing_state_no_flag() {
+    fn test_simulate_sub_from_existing_state_no_flag() {
         let code = "sub ax, 2";
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16)]),
@@ -345,7 +417,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_sub_from_existing_state_with_flag() {
+    fn test_simulate_sub_from_existing_state_with_flag() {
         let code = "sub ax, 6";
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16)]),
@@ -358,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_sub_from_existing_state_with_flag_and_reg() {
+    fn test_simulate_sub_from_existing_state_with_flag_and_reg() {
         let code = "sub ax, bx";
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 6u16)]),
@@ -371,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn simulate_sub_from_existing_state_no_flag_and_reg() {
+    fn test_simulate_sub_from_existing_state_no_flag_and_reg() {
         let code = "sub ax, bx";
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
@@ -384,7 +456,107 @@ mod tests {
     }
 
     #[test]
-    fn simulate_line_mov_with_existing_state() {
+    fn test_simulate_sub_signed_flag() {
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([
+                ("ax".to_string(), 6u16),
+                ("bx".to_string(), 65500u16),
+                ("cx".to_string(), 2u16),
+            ]),
+            flags: HashSet::new(),
+        };
+
+        let test_cases = [
+            (
+                "sub ax, 7",
+                "ax",
+                65535,
+                "s",
+                "should assigned signed flag when sub result is minus",
+            ),
+            (
+                "sub bx, 1",
+                "bx",
+                65499u16,
+                "s",
+                "should assigned signed flag when sub result have signed bit",
+            ),
+            (
+                "sub cx, 1",
+                "cx",
+                1u16,
+                "",
+                "should not assigned signed flag",
+            ),
+        ];
+
+        for test_case in test_cases {
+            let (code, register, expected_value, expected_flags, err_message) = test_case;
+            simulate_line(&mut current_state, code).unwrap();
+            assert_eq!(
+                current_state.register[register], expected_value,
+                "{}",
+                err_message
+            );
+            assert_eq!(
+                current_state.flags.get_all_flags_sorted(),
+                expected_flags,
+                "{}",
+                err_message
+            );
+        }
+    }
+
+    #[test]
+    fn test_simulate_cmp() {
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
+            flags: HashSet::new(),
+        };
+        let test_cases = [
+            ("cmp ax, 6", "z"),
+            ("cmp ax, 5", ""),
+            ("cmp ax, bx", ""),
+            ("cmp ax, 7", "s"),
+        ];
+        for test_case in test_cases {
+            let (code, expected_flags) = test_case;
+            simulate_line(&mut current_state, code).unwrap();
+            assert_eq!(current_state.flags.get_all_flags_sorted(), expected_flags);
+        }
+    }
+
+    #[test]
+    fn test_simulate_add() {
+        let mut current_state = Cpu {
+            register: HashMap::from_iter([
+                ("ax".to_string(), 6u16),
+                ("bx".to_string(), 5u16),
+                ("cx".to_string(), 1u16),
+                ("dx".to_string(), 65535u16),
+            ]),
+            flags: HashSet::new(),
+        };
+        let test_cases = [
+            ("add ax, 7", "ax", 13u16, ""),
+            ("add bx, ax", "bx", 18, ""),
+            ("add cx, 32767", "cx", 32768, "s"),
+            ("add dx, 1", "dx", 0, "z"),
+        ];
+        for test_case in test_cases {
+            let (code, register, expected_value, expected_flag) = test_case;
+            simulate_line(&mut current_state, code).unwrap();
+            assert_eq!(
+                current_state.register.get_by_reg_name(register),
+                Some(expected_value),
+                "Failed on test {}", code
+            );
+            assert_eq!(current_state.flags.get_all_flags_sorted(), expected_flag, "Failed on test {}", code);
+        }
+    }
+
+    #[test]
+    fn test_simulate_line_mov_with_existing_state() {
         let code = "mov bx, 4";
         let mut current_state = Cpu {
             register: HashMap::new(),

@@ -1,3 +1,3 @@
 bits 16
 
-cmp ax, 56782
+add ax, 6
