@@ -1,5 +1,5 @@
 bits 16
 
 start:
-add ax, 6
+mov ax, 3
 ;jnz start

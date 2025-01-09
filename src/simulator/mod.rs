@@ -13,6 +13,7 @@ mod register_set;
 pub struct Cpu {
     pub register: HashMap<String, u16>,
     pub flags: HashSet<char>,
+    pub pointer: usize,
 }
 
 trait RegisterBits {
@@ -31,6 +32,7 @@ pub fn simulate_from_code(code: String) -> Result<Cpu, ParseAssemblyError> {
     let mut result = Cpu {
         register: HashMap::<String, u16>::new(),
         flags: HashSet::new(),
+        pointer: 0,
     };
     let lines = code.split('\n');
     for line in lines {
@@ -49,17 +51,17 @@ pub fn simulate_from_binary(binary: &[u8]) -> Result<Cpu, ParseAssemblyError> {
     let mut result = Cpu {
         register: HashMap::<String, u16>::new(),
         flags: HashSet::new(),
+        pointer: 0,
     };
-    let mut pointer = 0;
-    while binary.get(pointer).is_some() {
-        let end = min(binary.len(), pointer + 6);
-        let current_chunk = Vec::<u8>::from(&binary[pointer..end]);
+    while binary.get(result.pointer).is_some() {
+        let end = min(binary.len(), result.pointer + 6);
+        let current_chunk = Vec::<u8>::from(&binary[result.pointer..end]);
         let (asm_instruction, bytes_consumed) = decode(&current_chunk).unwrap();
         match simulate_line(&mut result, &asm_instruction) {
             Ok(()) => (),
             Err(e) => return Err(e),
         }
-        pointer += usize::from(bytes_consumed);
+        result.pointer += usize::from(bytes_consumed);
     }
     Ok(result)
 }
@@ -304,6 +306,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         let result = simulate_line(&mut current_state, code);
         assert_eq!(result, Ok(()));
@@ -316,6 +319,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         simulate_line(&mut current_state, code).unwrap();
 
@@ -328,6 +332,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();
@@ -340,6 +345,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         let result = simulate_line(&mut current_state, code);
 
@@ -357,6 +363,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         let result = simulate_line(&mut current_state, code);
 
@@ -374,6 +381,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         // let result = simue(code.to_string());
         let result = simulate_line(&mut current_state, code);
@@ -392,6 +400,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         let result = simulate_line(&mut current_state, code);
 
@@ -409,6 +418,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16)]),
             flags: HashSet::new(),
+            pointer: 0,
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -422,6 +432,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16)]),
             flags: HashSet::new(),
+            pointer: 0,
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -435,6 +446,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 6u16)]),
             flags: HashSet::new(),
+            pointer: 0,
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -448,6 +460,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
             flags: HashSet::new(),
+            pointer: 0,
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -464,6 +477,7 @@ mod tests {
                 ("cx".to_string(), 2u16),
             ]),
             flags: HashSet::new(),
+            pointer: 0,
         };
 
         let test_cases = [
@@ -512,6 +526,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
             flags: HashSet::new(),
+            pointer: 0,
         };
         let test_cases = [
             ("cmp ax, 6", "z"),
@@ -536,6 +551,7 @@ mod tests {
                 ("dx".to_string(), 65535u16),
             ]),
             flags: HashSet::new(),
+            pointer: 0,
         };
         let test_cases = [
             ("add ax, 7", "ax", 13u16, ""),
@@ -549,9 +565,15 @@ mod tests {
             assert_eq!(
                 current_state.register.get_by_reg_name(register),
                 Some(expected_value),
-                "Failed on test {}", code
+                "Failed on test {}",
+                code
             );
-            assert_eq!(current_state.flags.get_all_flags_sorted(), expected_flag, "Failed on test {}", code);
+            assert_eq!(
+                current_state.flags.get_all_flags_sorted(),
+                expected_flag,
+                "Failed on test {}",
+                code
+            );
         }
     }
 
@@ -561,6 +583,7 @@ mod tests {
         let mut current_state = Cpu {
             register: HashMap::new(),
             flags: HashSet::new(),
+            pointer: 0,
         };
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();
@@ -571,10 +594,11 @@ mod tests {
     #[test]
     fn test_simulate_from_binary() {
         let binary = [185, 3, 0, 184, 4, 0, 137, 195]; // From asm/test_simulation
-        let result = simulate_from_binary(&binary).unwrap().register;
+        let result = simulate_from_binary(&binary).unwrap();
 
-        assert_eq!(result["ax"], 4);
-        assert_eq!(result["bx"], 4);
-        assert_eq!(result["cx"], 3);
+        assert_eq!(result.register["ax"], 4);
+        assert_eq!(result.register["bx"], 4);
+        assert_eq!(result.register["cx"], 3);
+        assert_eq!(result.pointer, 8);
     }
 }
