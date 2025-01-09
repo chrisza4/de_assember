@@ -1,5 +1,8 @@
 bits 16
 
+mov ax, 6
+mov bx, 0
 start:
-mov ax, 3
-;jnz start
+add bx, 1
+sub ax, 2
+jnz start

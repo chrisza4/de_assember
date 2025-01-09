@@ -3,6 +3,7 @@ use std::collections::HashSet;
 pub trait Flags {
     fn set_flag(&mut self, flag: char, value: bool);
     fn get_all_flags_sorted(&self) -> String;
+    fn has_flag(&self, flag: &char) -> bool;
 }
 
 impl Flags for HashSet<char> {
@@ -18,6 +19,10 @@ impl Flags for HashSet<char> {
         let mut flags: Vec<&char> = self.iter().collect();
         flags.sort();
         String::from_iter(flags)
+    }
+
+    fn has_flag(&self, flag: &char) -> bool {
+        self.contains(flag)
     }
 }
 

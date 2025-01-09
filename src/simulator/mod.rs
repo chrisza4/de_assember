@@ -17,11 +17,11 @@ pub struct Cpu {
 }
 
 trait RegisterBits {
-    fn has_signed_flag(self) -> bool;
+    fn has_signed_bit(self) -> bool;
 }
 
 impl RegisterBits for u16 {
-    fn has_signed_flag(self) -> bool {
+    fn has_signed_bit(self) -> bool {
         const SIGNED_FLAG_MUST_BE_OVER: u16 = 2u16.pow(7);
         self >= SIGNED_FLAG_MUST_BE_OVER
     }
@@ -53,15 +53,20 @@ pub fn simulate_from_binary(binary: &[u8]) -> Result<Cpu, ParseAssemblyError> {
         flags: HashSet::new(),
         pointer: 0,
     };
+    let mut count = 0;
     while binary.get(result.pointer).is_some() {
+        count += 1;
         let end = min(binary.len(), result.pointer + 6);
         let current_chunk = Vec::<u8>::from(&binary[result.pointer..end]);
         let (asm_instruction, bytes_consumed) = decode(&current_chunk).unwrap();
+        result.pointer += usize::from(bytes_consumed);
         match simulate_line(&mut result, &asm_instruction) {
             Ok(()) => (),
             Err(e) => return Err(e),
         }
-        result.pointer += usize::from(bytes_consumed);
+        if count > 10000 {
+            panic!("Too many execution. Possibly bug")
+        }
     }
     Ok(result)
 }
@@ -84,27 +89,27 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             let new_val = current_val.wrapping_sub(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
-            state.flags.set_flag('s', new_val.has_signed_flag());
+            state.flags.set_flag('s', new_val.has_signed_bit());
         }
         Ok(Assembly::Sub(register, RegisterOrValue::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
-            state.flags.set_flag('s', new_val.has_signed_flag());
+            state.flags.set_flag('s', new_val.has_signed_bit());
         }
         Ok(Assembly::Cmp(register, RegisterOrValue::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.flags.set_flag('z', new_val == 0);
-            state.flags.set_flag('s', new_val.has_signed_flag());
+            state.flags.set_flag('s', new_val.has_signed_bit());
         }
         Ok(Assembly::Cmp(register, RegisterOrValue::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.flags.set_flag('z', new_val == 0);
-            state.flags.set_flag('s', new_val.has_signed_flag());
+            state.flags.set_flag('s', new_val.has_signed_bit());
         }
         Ok(Assembly::Add(register, RegisterOrValue::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
@@ -112,16 +117,22 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             let new_val = current_val.wrapping_add(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
-            state.flags.set_flag('s', new_val.has_signed_flag());
+            state.flags.set_flag('s', new_val.has_signed_bit());
         }
         Ok(Assembly::Add(register, RegisterOrValue::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_add(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
-            state.flags.set_flag('s', new_val.has_signed_flag());
+            state.flags.set_flag('s', new_val.has_signed_bit());
         }
-
+        Ok(Assembly::Jnz(value)) => {
+            if !state.flags.has_flag(&'z') {
+                state.pointer = ((state.pointer as isize) + (value as isize))
+                    .try_into()
+                    .unwrap_or(0);
+            }
+        }
         Ok(Assembly::Bit) => (),
         Err(e) => return Err(e),
     };
@@ -138,6 +149,7 @@ enum Assembly {
     Sub(String, RegisterOrValue),
     Cmp(String, RegisterOrValue),
     Add(String, RegisterOrValue),
+    Jnz(i8),
     Bit,
 }
 
@@ -235,6 +247,16 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
             }
         }
         "bits" => Ok(Assembly::Bit),
+        "jnz" => {
+            let value = command_and_params.map(|x| x.1.parse::<i8>());
+            match value {
+                Some(Ok(value)) => Ok(Assembly::Jnz(value)),
+                Some(Err(_)) => Err(ParseAssemblyError::InvalidParams(
+                    "Params of jnz invalid".to_string(),
+                )),
+                None => Err(ParseAssemblyError::Unknown),
+            }
+        }
         _ => {
             println!("Parse error for {:?}", command);
             Err(ParseAssemblyError::Unknown)
@@ -600,5 +622,28 @@ mod tests {
         assert_eq!(result.register["bx"], 4);
         assert_eq!(result.register["cx"], 3);
         assert_eq!(result.pointer, 8);
+    }
+
+    #[test]
+    fn test_simulate_jnz() {
+        // Original source
+        // =======
+        // mov ax, 6
+        // mov bx, 0
+        // start:
+        // add bx, 1
+        // sub ax, 2
+        // jnz start
+
+        let binary = [
+            0b10111000, 0b00000110, 0b00000000, 0b10111011, 0b00000000, 0b00000000, 0b10000011,
+            0b11000011, 0b00000001, 0b10000011, 0b11101000, 0b00000010, 0b01110101, 0b11111000,
+        ];
+
+        let result = simulate_from_binary(&binary).unwrap();
+
+        assert_eq!(result.register["ax"], 0);
+        assert_eq!(result.register["bx"], 3);
+        assert_eq!(result.pointer, 14);
     }
 }

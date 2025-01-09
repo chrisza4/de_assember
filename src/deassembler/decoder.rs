@@ -372,7 +372,6 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
                         && x.binary_at_equals(4, 0)
                         && x.binary_at_equals(5, 0)
                     {
-                        println!("x: {x:#b}");
                         Ok(OpCode::AddImmediateFromRm)
                     } else if x.binary_at_equals(3, 1)
                         && x.binary_at_equals(4, 1)

@@ -37,6 +37,7 @@ fn run_simulate() {
                 println!("{:?}: {:#06x}", register, value);
             }
             println!("Flags: {}", result.flags.get_all_flags_sorted());
+            println!("IP: {:#06x} ({})", result.pointer, result.pointer);
         }
         Err(err) => println!("Error loading file: {}", err),
     }
