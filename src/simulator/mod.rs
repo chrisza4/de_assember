@@ -76,12 +76,8 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
     println!("Asm: {}", line);
     match assembly {
         Ok(Assembly::Mov(register, rmv2)) => {
-            let val = state.get_by_rmv(rmv2);
-            match register {
-                Rmv::Memory(_) => todo!(),
-                Rmv::Register(register) => state.register.insert_by_reg_name(&register, val),
-                Rmv::Value(_) => panic!("Cannot move to value"),
-            };
+            let val = state.get_by_rmv(&rmv2);
+            state.set_by_rmv(&register, val);
         },
         Ok(Assembly::Sub(register, Rmv::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
