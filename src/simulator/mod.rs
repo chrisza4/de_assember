@@ -6,14 +6,17 @@ use std::{
     cmp::min,
     collections::{HashMap, HashSet},
 };
+use params::Rmv;
 
 pub mod flags;
+pub mod params;
 mod register_set;
 
 pub struct Cpu {
     pub register: HashMap<String, u16>,
     pub flags: HashSet<char>,
     pub pointer: usize,
+    pub memory: Vec<u8>
 }
 
 trait RegisterBits {
@@ -33,6 +36,7 @@ pub fn simulate_from_code(code: String) -> Result<Cpu, ParseAssemblyError> {
         register: HashMap::<String, u16>::new(),
         flags: HashSet::new(),
         pointer: 0,
+        memory: vec![0; 1048527],
     };
     let lines = code.split('\n');
     for line in lines {
@@ -52,6 +56,7 @@ pub fn simulate_from_binary(binary: &[u8]) -> Result<Cpu, ParseAssemblyError> {
         register: HashMap::<String, u16>::new(),
         flags: HashSet::new(),
         pointer: 0,
+        memory: vec![0; 1048527],
     };
     let mut count = 0;
     while binary.get(result.pointer).is_some() {
@@ -75,15 +80,18 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
     let assembly = parse_assembly_code(line);
     println!("Asm: {}", line);
     match assembly {
-        Ok(Assembly::Mov(register, RegisterOrValue::Value(val))) => {
+        Ok(Assembly::Mov(register, Rmv::Value(val))) => {
             state.register.insert_by_reg_name(&register, val);
         }
-        Ok(Assembly::Mov(register, RegisterOrValue::Register(from_reg))) => {
+        Ok(Assembly::Mov(register, Rmv::Register(from_reg))) => {
             let val = state.register.get_by_reg_name(&from_reg).unwrap();
 
             state.register.insert_by_reg_name(&register, val);
         }
-        Ok(Assembly::Sub(register, RegisterOrValue::Register(from_reg))) => {
+        Ok(Assembly::Mov(register, Rmv::Memory(memory_address))) => {
+            todo!()
+        }
+        Ok(Assembly::Sub(register, Rmv::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
@@ -91,27 +99,33 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Sub(register, RegisterOrValue::Value(val))) => {
+        Ok(Assembly::Sub(register, Rmv::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Cmp(register, RegisterOrValue::Register(from_reg))) => {
+        Ok(Assembly::Sub(register, Rmv::Memory(memory_address))) => {
+            todo!()
+        }
+        Ok(Assembly::Cmp(register, Rmv::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Cmp(register, RegisterOrValue::Value(val))) => {
+        Ok(Assembly::Cmp(register, Rmv::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Add(register, RegisterOrValue::Register(from_reg))) => {
+        Ok(Assembly::Cmp(register, Rmv::Memory(memory_address))) => {
+            todo!()
+        }
+        Ok(Assembly::Add(register, Rmv::Register(from_reg))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let val = state.register.get_by_reg_name(&from_reg).unwrap_or(0);
             let new_val = current_val.wrapping_add(val);
@@ -119,12 +133,15 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Add(register, RegisterOrValue::Value(val))) => {
+        Ok(Assembly::Add(register, Rmv::Value(val))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_add(val);
             state.register.insert_by_reg_name(&register, new_val);
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
+        }
+        Ok(Assembly::Add(register, Rmv::Memory(memory_address))) => {
+            todo!()
         }
         Ok(Assembly::Jnz(value)) => {
             if !state.flags.has_flag(&'z') {
@@ -139,16 +156,11 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
     Ok(())
 }
 
-enum RegisterOrValue {
-    Register(String),
-    Value(u16),
-}
-
 enum Assembly {
-    Mov(String, RegisterOrValue),
-    Sub(String, RegisterOrValue),
-    Cmp(String, RegisterOrValue),
-    Add(String, RegisterOrValue),
+    Mov(String, Rmv),
+    Sub(String, Rmv),
+    Cmp(String, Rmv),
+    Add(String, Rmv),
     Jnz(i8),
     Bit,
 }
@@ -198,11 +210,11 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
             match value.parse::<u16>() {
                 Ok(u) => Ok(Assembly::Mov(
                     register_to_mov_to.to_string(),
-                    RegisterOrValue::Value(u),
+                    Rmv::Value(u),
                 )),
                 Err(_) => Ok(Assembly::Mov(
                     register_to_mov_to.to_string(),
-                    RegisterOrValue::Register(value.to_string()),
+                    Rmv::Register(value.to_string()),
                 )),
             }
         }
@@ -211,11 +223,11 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
             match value.parse::<u16>() {
                 Ok(u) => Ok(Assembly::Sub(
                     register.to_string(),
-                    RegisterOrValue::Value(u),
+                    Rmv::Value(u),
                 )),
                 Err(_) => Ok(Assembly::Sub(
                     register.to_string(),
-                    RegisterOrValue::Register(value.to_string()),
+                    Rmv::Register(value.to_string()),
                 )),
             }
         }
@@ -224,11 +236,11 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
             match value.parse::<u16>() {
                 Ok(u) => Ok(Assembly::Cmp(
                     register.to_string(),
-                    RegisterOrValue::Value(u),
+                    Rmv::Value(u),
                 )),
                 Err(_) => Ok(Assembly::Cmp(
                     register.to_string(),
-                    RegisterOrValue::Register(value.to_string()),
+                    Rmv::Register(value.to_string()),
                 )),
             }
         }
@@ -238,11 +250,11 @@ fn parse_assembly_code(code: &str) -> Result<Assembly, ParseAssemblyError> {
             match value.parse::<u16>() {
                 Ok(u) => Ok(Assembly::Add(
                     register.to_string(),
-                    RegisterOrValue::Value(u),
+                    Rmv::Value(u),
                 )),
                 Err(_) => Ok(Assembly::Add(
                     register.to_string(),
-                    RegisterOrValue::Register(value.to_string()),
+                    Rmv::Register(value.to_string()),
                 )),
             }
         }
@@ -329,6 +341,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         let result = simulate_line(&mut current_state, code);
         assert_eq!(result, Ok(()));
@@ -342,6 +355,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         simulate_line(&mut current_state, code).unwrap();
 
@@ -355,6 +369,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();
@@ -368,6 +383,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         let result = simulate_line(&mut current_state, code);
 
@@ -386,6 +402,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         let result = simulate_line(&mut current_state, code);
 
@@ -404,6 +421,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         // let result = simue(code.to_string());
         let result = simulate_line(&mut current_state, code);
@@ -423,6 +441,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         let result = simulate_line(&mut current_state, code);
 
@@ -441,6 +460,7 @@ mod tests {
             register: HashMap::from_iter([("ax".to_string(), 6u16)]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -455,6 +475,7 @@ mod tests {
             register: HashMap::from_iter([("ax".to_string(), 6u16)]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -469,6 +490,7 @@ mod tests {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 6u16)]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -483,6 +505,7 @@ mod tests {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
 
         simulate_line(&mut current_state, code).unwrap();
@@ -500,6 +523,7 @@ mod tests {
             ]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
 
         let test_cases = [
@@ -549,6 +573,7 @@ mod tests {
             register: HashMap::from_iter([("ax".to_string(), 6u16), ("bx".to_string(), 5u16)]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         let test_cases = [
             ("cmp ax, 6", "z"),
@@ -574,6 +599,7 @@ mod tests {
             ]),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         let test_cases = [
             ("add ax, 7", "ax", 13u16, ""),
@@ -606,6 +632,7 @@ mod tests {
             register: HashMap::new(),
             flags: HashSet::new(),
             pointer: 0,
+            memory: vec![0; 1048527],
         };
         current_state.register.insert("bx".into(), 3);
         simulate_line(&mut current_state, code).unwrap();
