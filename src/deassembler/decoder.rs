@@ -36,6 +36,7 @@ enum OpCode {
     CmpImmediateFromRm,
     CmpRmAndRegisterToEither,
     CmpImmediateFromAccumulator,
+    Jnz,
 }
 
 #[repr(u8)]
@@ -75,8 +76,15 @@ pub fn decode(instruction: &[u8]) -> Option<(String, u8)> {
         Ok(OpCode::CmpImmediateFromRm) => decode_cmp_immediate_from_rm(&instruction_deref),
         Ok(OpCode::CmpRmAndRegisterToEither) => decode_cmp_rm_and_register(&instruction_deref),
         Ok(OpCode::CmpImmediateFromAccumulator) => decode_cmp_immediate_from_accumulator(&instruction_deref),
+        Ok(OpCode::Jnz) => decode_jnz(&instruction),
         Err(e) => panic!("{}", e),
     }
+}
+
+fn decode_jnz(instruction: &&[u8]) -> Option<(String, u8)> {
+    let second_bytes = instruction.get(1)?;
+
+    Some((format!("jnz {}", *second_bytes as i8), 2))
 }
 
 fn decode_cmp_immediate_from_accumulator(instruction: &[u8]) -> Option<(String, u8)> {
@@ -338,6 +346,7 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
     const ADD_RM_AND_REGISTER_TO_EITHER: u8 = 0b00000000;
     const CMP_IMMEDIATE_FROM_ACCUMULATOR: u8 = 0b00111100;
     const CMP_RM_AND_REGISTER_TO_EITHER: u8 = 0b00111000;
+    const JNZ_JUMP_ON_NOT_EQUAL_ZERO: u8 = 0b01110101;
 
     match first_byte {
         _ if first_byte.binary_starts_with(RM_TO_FROM_REGISTER) => Ok(OpCode::RmToOrFromRegister),
@@ -393,6 +402,9 @@ fn decode_opcode(first_byte: &u8, second_byte: Option<&u8>) -> Result<OpCode, St
         }
         _ if (first_byte ^ CMP_IMMEDIATE_FROM_ACCUMULATOR) | 1 == 1 => {
             Ok(OpCode::CmpImmediateFromAccumulator)
+        }
+        _ if *first_byte == JNZ_JUMP_ON_NOT_EQUAL_ZERO => {
+            Ok(OpCode::Jnz)
         }
 
         _ => Err(format!("Invalid Opcode {:?}", first_byte)), // Handle unmatched cases if necessary
@@ -680,6 +692,19 @@ mod tests {
         let test_cases = [
             (vec![0b10000011, 0b11000000, 0b00100001], "add ax, 33", 3),
             (vec![0b00000101, 0b11001110, 0b11011101], "add ax, 56782", 3),
+        ];
+
+        for (encoded_instruction, expected, bytes_consumed) in test_cases {
+            let decoded_instruction = decode(&encoded_instruction).unwrap();
+            assert_eq!(expected, decoded_instruction.0);
+            assert_eq!(bytes_consumed, decoded_instruction.1);
+        }
+    }
+
+    #[test]
+    fn test_decode_jnz() {
+        let test_cases = [
+            (vec![0b01110101,0b11111011], "jnz -5", 2),
         ];
 
         for (encoded_instruction, expected, bytes_consumed) in test_cases {
