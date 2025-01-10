@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::binary::combined_u8;
 
-use super::{params::Rmv, register_set::RegisterSet};
+use super::{params::{Rmv, Size}, register_set::RegisterSet};
 
 pub struct Cpu {
     pub register: HashMap<String, u16>,
@@ -31,7 +31,7 @@ impl RmvStore for Cpu {
     fn get_by_rmv(&self, address: &Rmv) -> u16 {
         match address {
             Rmv::Register(register) => self.register.get_by_reg_name(&register).unwrap_or(0),
-            Rmv::Value(x) => *x,
+            Rmv::Value(x, _size) => *x,
             Rmv::Memory(memory_address_str) => {
                 let memory_index: u16 = memory_address_str
                     .split("+")
@@ -77,20 +77,20 @@ impl RmvStore for Cpu {
             Rmv::Register(register) => {
                 self.register.insert_by_reg_name(&register, value);
             }
-            Rmv::Value(_) => todo!("No set to value"),
+            Rmv::Value(_, _) => todo!("No set to value"),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Cpu, RmvStore};
+    use super::*;
     use crate::{binary::combined_u8, simulator::params::Rmv};
 
     #[test]
     fn test_get_by_rmv_value() {
         let cpu = Cpu::default();
-        assert_eq!(cpu.get_by_rmv(&Rmv::Value(30)), 30);
+        assert_eq!(cpu.get_by_rmv(&Rmv::Value(30, Size::Word)), 30);
     }
 
     #[test]

@@ -87,7 +87,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Sub(register, Rmv::Value(val))) => {
+        Ok(Assembly::Sub(register, Rmv::Value(val, _size))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.register.insert_by_reg_name(&register, new_val);
@@ -104,7 +104,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Cmp(register, Rmv::Value(val))) => {
+        Ok(Assembly::Cmp(register, Rmv::Value(val, _size))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_sub(val);
             state.flags.set_flag('z', new_val == 0);
@@ -121,7 +121,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Add(register, Rmv::Value(val))) => {
+        Ok(Assembly::Add(register, Rmv::Value(val, _size))) => {
             let current_val = state.register.get_by_reg_name(&register).unwrap_or(0);
             let new_val = current_val.wrapping_add(val);
             state.register.insert_by_reg_name(&register, new_val);
