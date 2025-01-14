@@ -2,7 +2,7 @@ use cpu::{Cpu, RmvStore};
 use flags::Flags;
 use register_set::RegisterSet;
 
-use crate::{binary::combined_u8, deassembler::decoder::decode};
+use crate::{deassembler::decoder::decode};
 use params::Rmv;
 use std::{
     cmp::min,
@@ -94,7 +94,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Sub(register, Rmv::Memory(memory_address))) => {
+        Ok(Assembly::Sub(_register, Rmv::Memory(_memory_address))) => {
             todo!()
         }
         Ok(Assembly::Cmp(register, Rmv::Register(from_reg))) => {
@@ -110,7 +110,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Cmp(register, Rmv::Memory(memory_address))) => {
+        Ok(Assembly::Cmp(_register, Rmv::Memory(_memory_address))) => {
             todo!()
         }
         Ok(Assembly::Add(register, Rmv::Register(from_reg))) => {
@@ -128,7 +128,7 @@ pub fn simulate_line(state: &mut Cpu, line: &str) -> Result<(), ParseAssemblyErr
             state.flags.set_flag('z', new_val == 0);
             state.flags.set_flag('s', new_val.has_signed_bit());
         }
-        Ok(Assembly::Add(register, Rmv::Memory(memory_address))) => {
+        Ok(Assembly::Add(_register, Rmv::Memory(_memory_address))) => {
             todo!()
         }
         Ok(Assembly::Jnz(value)) => {

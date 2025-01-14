@@ -7,7 +7,7 @@ pub enum Rmv {
 
 #[derive(PartialEq, Eq, Debug)]
 pub enum Size {
-    Byte,
+    // Byte,
     Word,
 }
 

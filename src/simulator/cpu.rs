@@ -2,7 +2,10 @@ use std::collections::{HashMap, HashSet};
 
 use crate::binary::combined_u8;
 
-use super::{params::{Rmv, Size}, register_set::RegisterSet};
+use super::{
+    params::{Rmv, Size},
+    register_set::RegisterSet,
+};
 
 pub struct Cpu {
     pub register: HashMap<String, u16>,
@@ -21,10 +24,26 @@ impl Default for Cpu {
         }
     }
 }
-
 pub trait RmvStore {
     fn get_by_rmv(&self, address: &Rmv) -> u16;
     fn set_by_rmv(&mut self, address: &Rmv, value: u16);
+}
+
+fn get_memory_index(cpu: &Cpu, address: &str) -> usize {
+    let memory_index: u16 = address
+        .split("+")
+        .map(|x| {
+            let memory_or_register = x.trim();
+            match memory_or_register.parse::<u16>() {
+                Ok(v) => v,
+                Err(_) => cpu
+                    .register
+                    .get_by_reg_name(memory_or_register)
+                    .unwrap_or(0),
+            }
+        })
+        .sum();
+    memory_index as usize
 }
 
 impl RmvStore for Cpu {
@@ -33,20 +52,7 @@ impl RmvStore for Cpu {
             Rmv::Register(register) => self.register.get_by_reg_name(&register).unwrap_or(0),
             Rmv::Value(x, _size) => *x,
             Rmv::Memory(memory_address_str) => {
-                let memory_index: u16 = memory_address_str
-                    .split("+")
-                    .map(|x| {
-                        let memory_or_register = x.trim();
-                        match memory_or_register.parse::<u16>() {
-                            Ok(v) => v,
-                            Err(_) => self
-                                .register
-                                .get_by_reg_name(memory_or_register)
-                                .unwrap_or(0),
-                        }
-                    })
-                    .sum();
-                let memory_index = memory_index as usize;
+                let memory_index = get_memory_index(self, memory_address_str);
                 let first_byte = self.memory[memory_index];
                 let second_byte = self.memory[memory_index + 1];
                 combined_u8(first_byte, second_byte)
@@ -57,20 +63,7 @@ impl RmvStore for Cpu {
     fn set_by_rmv(&mut self, address: &Rmv, value: u16) {
         match address {
             Rmv::Memory(memory_address_str) => {
-                let memory_index: u16 = memory_address_str
-                    .split("+")
-                    .map(|x| {
-                        let memory_or_register = x.trim();
-                        match memory_or_register.parse::<u16>() {
-                            Ok(v) => v,
-                            Err(_) => self
-                                .register
-                                .get_by_reg_name(memory_or_register)
-                                .unwrap_or(0),
-                        }
-                    })
-                    .sum();
-                let memory_index = memory_index as usize;
+                let memory_index = get_memory_index(self, memory_address_str);
                 self.memory[memory_index + 1] = (value % 256) as u8;
                 self.memory[memory_index] = (value >> 8) as u8;
             }
@@ -109,7 +102,10 @@ mod tests {
         cpu.memory[32] = 20;
         cpu.memory[33] = 30;
         let expected = combined_u8(20, 30);
-        assert_eq!(cpu.get_by_rmv(&Rmv::Memory("ax + 22".to_string())), expected);
+        assert_eq!(
+            cpu.get_by_rmv(&Rmv::Memory("ax + 22".to_string())),
+            expected
+        );
     }
 
     #[test]
